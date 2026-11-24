@@ -1,0 +1,186 @@
+# Guessong
+
+Guess the song from the shortest possible clip. Pick a playlist, play 10 songs, and identify each one from a clip that grows from **0.5s → 1.5s → 3s → 5s → 9s → 15s** across 6 attempts. Score per-playlist leaderboards (ties go to the faster round), use point-costing hints, and challenge friends to beat you on the exact same 10 songs.
+
+It's a mobile-first web app (installable as a PWA) with a Node/TypeScript server.
+
+## Music sources
+
+The game runs on a swappable music layer. Pick one per deployment with `MUSIC_PROVIDER`:
+
+| Mode | Audio | Who can play | Use it for |
+|---|---|---|---|
+| `apple` (default) | 30s previews from the free **iTunes Search API**, decoded in the browser with sample-accurate timing | Anyone. No login or subscription | Public use |
+| `spotify` | Full tracks through the player's **Spotify Premium** account | You + up to 4 people you allowlist | Private play with friends |
+| `mock` | Offline demo catalog with synthesized audio | Anyone | Development, tests, demos |
+
+### ⚠️ Read before using Spotify mode
+
+Spotify mode works, but you should know what Spotify's rules say:
+
+- **The [Spotify Developer Policy](https://developer.spotify.com/policy/) prohibits games and trivia quizzes** ("Do not create a game, including trivia quizzes"). Its compliance guidance names a "name that tune" quiz as a disallowed use. Spotify can disable an app that breaks this.
+- The policy also requires showing the track's **cover art and metadata whenever Spotify audio plays**. That's incompatible with a guessing game.
+- Since February 2026, **Development Mode apps allow at most 5 users**, each added by hand in the dashboard. The app owner also needs Premium ([migration guide](https://developer.spotify.com/documentation/web-api/tutorials/february-2026-migration-guide)). Extended quota requires an established business.
+- Development Mode apps **can't read Spotify's editorial playlists or other users' playlists**, and new apps get **no 30-second preview URLs**. That's why Spotify mode plays full tracks via Premium, and why curated playlists are seed lists rather than Spotify playlist IDs.
+
+Use Spotify mode only for private play, and at your own risk. For anything public, use `apple`, or get written approval from Spotify first.
+
+## Quick start
+
+Requires **Node 22.13+** (the server uses the built-in `node:sqlite`).
+
+```bash
+npm install
+npm run dev            # API on :8787 + web on :5173, Apple previews by default
+# open http://127.0.0.1:5173
+```
+
+On first start the server resolves the curated playlists. Resolved track IDs are pinned in `server/data/pins/apple.json`, so this takes a few seconds.
+
+To try it offline, with no network access at all:
+
+```bash
+MUSIC_PROVIDER=mock npm run dev
+```
+
+## Spotify setup
+
+1. Create an app at the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) and select **Web API** and **Web Playback SDK**.
+2. Add the redirect URIs, which must match exactly. Spotify rejects `localhost`, so use `127.0.0.1`:
+   - development: `http://127.0.0.1:5173/api/v1/auth/spotify/callback`
+   - production: `https://YOUR-DOMAIN/api/v1/auth/spotify/callback`
+3. Under **User Management**, add the Spotify account of every person who will play (max 5).
+4. Configure `.env` (see `.env.example`):
+   ```bash
+   MUSIC_PROVIDER=spotify
+   SPOTIFY_CLIENT_ID=…
+   SPOTIFY_CLIENT_SECRET=…
+   SPOTIFY_MARKET=US
+   ```
+5. Run `npm run dev`, open the app, tap **Connect**, and sign in with a Premium account.
+
+**Where the music plays:**
+
+- **Desktop browsers and Android Chrome:** the in-browser Spotify player (Web Playback SDK). Clips are timed locally, to within about ±50ms.
+- **iPhone and iPad:** browsers there don't support Spotify's in-browser player reliably, so the game uses **Connect mode**. Open the Spotify app, play and pause any song once, then pick the phone under *Profile → Playback device*. The server starts each clip and schedules its pause, so timing is close but less precise (network latency). `SPOTIFY_CONNECT_COMP_MS` adds a small correction if clips sound short.
+- **Your own playlists:** playlists you own can be added from *Profile → Add a playlist from your library*. Each gets its own leaderboard. This is the only kind of Spotify playlist a Development Mode app can read.
+
+Spotify has no "preview hook", so a clip starts about 30% into the full track, which usually lands near the first chorus. To pin a better start for a seed, use `{"title": "…", "artist": "…", "startAt": "1:02"}`.
+
+## How the game works
+
+**Clips.**
+- When a song loads, it auto-plays 0 → 0.5s.
+- **Skip** auto-plays only the newly unlocked slice (for example 1.5s → 3s).
+- **▶** replays everything unlocked, from 0.
+- A **wrong guess** unlocks more audio and waits for ▶.
+- On attempt 6 the skip button becomes **Reveal**.
+- The result card keeps the song playing in the background.
+
+**Scoring.**
+- A correct guess earns 100 / 80 / 60 / 40 / 20 / 10 points on attempts 1–6, and a miss earns 0, so a round's maximum is 1000.
+- Round time counts only time spent on each song: from its first play to its answer. Loading and result screens don't count.
+- Leaderboards rank by best score, then the faster time.
+
+**Hints.** Your spec left the meaning of the hint numbers open. I treated them as **flat penalties on that song's reward**, with a floor so that a correct answer is still worth at least 5:
+
+`points = max(5, base(attempt) − Σ penalties)`
+
+| Hint | Penalty | Available |
+|---|---|---|
+| Artist | 75 | from attempt 1 |
+| Song (masked title, e.g. `C••• O• E•••••`) | 100 | from attempt 3 |
+| Cover | 85 | from attempt 1 |
+
+All of these are configurable with `HINT_PENALTIES`, `SONG_HINT_UNLOCK_ATTEMPT` and `MIN_POINTS_WITH_HINTS`.
+
+**Answer matching.** Guesses come from autocomplete over the provider's *whole* catalog, not just the playlist. The server looks up the guessed track itself; it never trusts titles sent by the client. A guess is correct on an id or ISRC match, or when the canonical title and the artist both match:
+
+- edition tags like *(Single Edit)*, *- 2011 Remaster* and *feat. X* are stripped
+- accents and punctuation are ignored, and small typos are tolerated in longer titles
+- the artists must share at least one credited artist
+
+For example, with *Come On Eileen (Single Edit)* by *Dexys Midnight Runners & Kevin Rowland* as the answer:
+- *Come On Eileen* by *Dexys Midnight Runners* is **correct**
+- *Come On Eileen* by *Pickin' On Series* is **wrong**
+
+**Challenges.** A challenge link (`/c/CODE`) replays the challenger's exact 10 songs in the same order. The result shows who won.
+
+## Architecture
+
+```
+shared/   game rules, scoring, timeline math, answer matching, API types (used by both sides)
+server/   Fastify + node:sqlite
+  src/providers/   apple.ts · spotify.ts · mock.ts behind one MusicProvider interface
+  src/services/    catalog (ingestion, track cache) · rounds · playlists/leaderboards · search · users
+  src/routes/      auth · game · spotify
+  data/            playlists.json (curated seeds) · pins/apple.json (resolved ids)
+web/      React + Vite
+  src/audio/       PreviewEngine (Web Audio) · SpotifySdkEngine · SpotifyConnectEngine
+  src/game/        machine.ts (round state machine) · useGame.ts (API + audio orchestration)
+  src/screens/     Discovery + pre-game sheet · Play (game, loading, result) · Summary · Leaderboard · Challenge
+```
+
+**Anti-spoiler.**
+- Song payloads never contain the title, artist, artwork or track id before the song is resolved, unless a hint unlocked them.
+- Preview audio streams through `/api/v1/rounds/:id/songs/:id/audio`, so the URL reveals nothing. Nothing is stored; bytes pass through.
+- In Spotify mode the server starts playback, so the track URI never appears in this app's API.
+- Scoring and timing are server-side.
+- One limit: in Spotify mode the Spotify player itself knows what's playing, so a determined player could look it up.
+
+**Fallback tracks.** Each round reserves 3 spare songs. If a song's audio fails to load before it has been heard, the client swaps in a spare and the round continues.
+
+### API (all under `/api/v1`)
+
+| Method & path | Purpose |
+|---|---|
+| `GET /me`, `POST /auth/guest`, `PATCH /me`, `POST /auth/logout` | Session (anonymous guests) and display name |
+| `GET /auth/spotify/login`, `GET /auth/spotify/callback`, `POST /me/spotify/disconnect` | Spotify OAuth (Authorization Code flow; tokens encrypted at rest) |
+| `GET /playlists?lang=&filter=popular\|unplayed` | Discovery grid, language chips, recently played |
+| `GET /playlists/:id/summary`, `GET /playlists/:id/leaderboard?page=&limit=` | Pre-game sheet (top 3) and full leaderboard |
+| `POST /rounds {playlistId, challengeCode?}`, `GET /rounds/:id` | Start a round (10 songs + 3 fallbacks), or resume one |
+| `POST /rounds/:id/songs/:songId/start\|skip\|hint\|guess\|reveal\|replace` | Song actions |
+| `GET /rounds/:id/songs/:songId/audio` | Preview stream (Apple and mock modes) |
+| `POST /rounds/:id/complete`, `GET /rounds/:id/summary` | Finish the round and update bests and ranks |
+| `POST /rounds/:id/challenge`, `POST /playlists/:id/challenge`, `GET /challenges/:code` | Challenges |
+| `GET /search?q=&playlistId=` | Autocomplete. Cached; falls back to known tracks when rate-limited |
+| `GET /spotify/token\|devices\|playlists`, `POST /rounds/:id/songs/:songId/spotify/load\|play`, `POST /spotify/pause`, `POST /playlists/import` | Spotify mode |
+
+## Curating playlists
+
+Edit `server/data/playlists.json`. Each playlist is a list of `["Title", "Artist"]` seeds, with a language and a storefront. Then run:
+
+```bash
+npm run ingest -- --write-pins        # resolves new seeds and pins their ids (Apple)
+npm run ingest -- --only 80s-hits --force
+```
+
+The command lists any seeds it couldn't match. Some originals aren't in a given storefront, and the matcher deliberately rejects covers and karaoke versions. Israeli-store titles are in Hebrew script, so write those seeds in Hebrew.
+
+## Deploying
+
+```bash
+npm run build
+NODE_ENV=production SESSION_SECRET=$(openssl rand -hex 32) PUBLIC_URL=https://your-domain npm start
+```
+
+- A `Dockerfile` is included; mount `/data` for the SQLite database.
+- The server serves the built web app, and HTTPS is needed for Spotify mode and for sharing.
+- Back up the `.sqlite` file. It holds users, rounds and leaderboards.
+
+## Testing
+
+```bash
+npm test                          # 59 unit + API tests: rules, matching, full rounds, Spotify flow (simulated API)
+npm run build && npm run test:e2e # plays a full round in Chromium and checks clip timing via Web Audio
+```
+
+The e2e test needs Playwright with Chromium installed (`npx playwright install chromium`). Screenshots go to `e2e-screenshots/`.
+
+## Differences from the original spec, and next steps
+
+- **Web/PWA instead of React Native.** A native iOS app would need Spotify's iOS SDK (App Remote) for precise Spotify timing on iPhone. Apple mode already has precise timing on iPhone through Web Audio.
+- **SQLite instead of Postgres + Redis.** Leaderboards are SQL window queries. `compositeLeaderboardScore()` in `shared/src/rules.ts` gives the single sortable number for a Redis ZSET when you scale out.
+- **Guest accounts** (plus Spotify login in Spotify mode) instead of Sign in with Apple/Google. Guests are upgraded in place when they connect Spotify.
+- **Curated playlists are our own seed lists**, titled "Guessong Picks", rather than Apple or Spotify editorial playlists.
+- **Apple's limits.** The iTunes Search API allows about 20 calls per minute per server IP. Search is cached and throttled, but a larger audience should move to the Apple Music API with a developer token. That's a new provider behind the same interface.
