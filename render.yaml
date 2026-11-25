@@ -12,3 +12,9 @@ services:
         value: apple
       - key: SESSION_SECRET
         generateValue: true
+      # Optional: Spotify games for up to 5 friends (see README → Spotify games).
+      # Render asks for these values; leave them empty to skip the feature.
+      - key: SPOTIFY_CLIENT_ID
+        sync: false
+      - key: SPOTIFY_CLIENT_SECRET
+        sync: false

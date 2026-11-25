@@ -9,6 +9,7 @@ const round: RoundDTO = {
   totalScore: 0,
   status: 'active',
   challenge: null,
+  audioLabel: null,
 };
 
 const song = (id: string, attempt = 1): SongStateDTO => ({
@@ -32,6 +33,7 @@ const reveal: RevealDTO = {
   album: null,
   artworkUrl: null,
   externalUrl: null,
+  externalLabel: null,
   attemptsUsed: 1,
   timeListenedMs: 500,
   pointsAwarded: 100,

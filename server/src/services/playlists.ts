@@ -101,12 +101,14 @@ export class Playlists {
   list(userId: string | null, opts: { lang?: string; filter?: 'popular' | 'unplayed' }): PlaylistsResponse {
     const ready = this.readyPlaylists();
     const counts = new Map<string, number>();
-    for (const p of ready) counts.set(p.lang, (counts.get(p.lang) ?? 0) + 1);
+    for (const p of ready) if (p.source_type !== 'library') counts.set(p.lang, (counts.get(p.lang) ?? 0) + 1);
     const known = LANGUAGES.filter((l) => counts.has(l.code));
     const extra = [...counts.keys()].filter((c) => !LANGUAGES.some((l) => l.code === c)).map(languageInfo);
     const languages: LanguageDTO[] = [...known, ...extra].map((l) => ({ ...l, playlistCount: counts.get(l.code) ?? 0 }));
 
-    let cards = ready.filter((p) => !opts.lang || p.lang === opts.lang).map((p) => this.card(p, userId));
+    // Library games are private: only their owner sees them, in `mine`.
+    const shared = ready.filter((p) => p.source_type !== 'library');
+    let cards = shared.filter((p) => !opts.lang || p.lang === opts.lang).map((p) => this.card(p, userId));
     if (opts.filter === 'unplayed') {
       cards = cards.filter((c) => !c.me);
     } else {
@@ -130,7 +132,10 @@ export class Playlists {
         }))
       : [];
 
-    return { languages, playlists: cards, recent };
+    const mine = userId
+      ? ready.filter((p) => p.source_type === 'library' && p.owner_user_id === userId).map((p) => this.card(p, userId))
+      : [];
+    return { languages, playlists: cards, recent, mine };
   }
 
   private entries(playlistId: string, userId: string | null, limit: number, offset: number): LeaderboardEntryDTO[] {

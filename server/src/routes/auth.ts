@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { MeResponse } from '@guessong/shared';
 import { SESSION_COOKIE, type Ctx } from '../app';
 import { ApiError, newId } from '../lib/util';
+import { SPOTIFY_LIBRARY_SCOPES, SPOTIFY_SCOPES, SpotifyApiError } from '../providers/spotify';
 import { userDTO } from '../services/users';
 
 const OAUTH_STATE_COOKIE = 'gs_oauth_state';
@@ -41,7 +42,7 @@ export function registerAuthRoutes(api: FastifyInstance, ctx: Ctx) {
 
   api.get('/auth/spotify/login', async (req, reply) => {
     const spotify = ctx.providers.spotify;
-    if (!spotify) throw new ApiError(404, 'spotify_disabled', 'Spotify mode is not enabled on this server');
+    if (!spotify) throw new ApiError(404, 'spotify_disabled', 'Spotify is not enabled on this server');
     const state = newId(24);
     reply.setCookie(OAUTH_STATE_COOKIE, state, {
       signed: true,
@@ -51,12 +52,14 @@ export function registerAuthRoutes(api: FastifyInstance, ctx: Ctx) {
       path: '/',
       maxAge: 600,
     });
-    return reply.redirect(spotify.authorizeUrl(state));
+    // Spotify mode plays through the account; library mode only reads it.
+    const scopes = ctx.config.provider === 'spotify' ? SPOTIFY_SCOPES : SPOTIFY_LIBRARY_SCOPES;
+    return reply.redirect(spotify.authorizeUrl(state, scopes));
   });
 
   api.get('/auth/spotify/callback', async (req, reply) => {
     const spotify = ctx.providers.spotify;
-    if (!spotify) throw new ApiError(404, 'spotify_disabled', 'Spotify mode is not enabled on this server');
+    if (!spotify) throw new ApiError(404, 'spotify_disabled', 'Spotify is not enabled on this server');
     const q = z.object({ code: z.string().optional(), state: z.string().optional(), error: z.string().optional() }).parse(req.query);
     const raw = req.cookies[OAUTH_STATE_COOKIE];
     const expected = raw ? req.unsignCookie(raw) : null;
@@ -73,6 +76,8 @@ export function registerAuthRoutes(api: FastifyInstance, ctx: Ctx) {
       return reply.redirect('/?spotify=connected');
     } catch (e) {
       req.log.warn(e, 'spotify callback failed');
+      // Development Mode apps answer 403 for accounts missing from the app's user list.
+      if (e instanceof SpotifyApiError && e.status === 403) return fail('not_allowlisted');
       return fail('login_failed');
     }
   });

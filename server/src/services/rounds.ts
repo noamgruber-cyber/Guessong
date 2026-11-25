@@ -80,6 +80,13 @@ interface ChallengeRow {
 
 const RESOLVED = new Set(['correct', 'missed']);
 
+function externalLabel(url: string | null): string | null {
+  if (!url) return null;
+  if (url.includes('open.spotify.com')) return 'Spotify';
+  if (url.includes('deezer.com')) return 'Deezer';
+  return null;
+}
+
 export class Rounds {
   constructor(
     private db: Db,
@@ -207,6 +214,7 @@ export class Rounds {
       totalScore: r.total_score,
       status: r.status,
       challenge: r.challenge_code ? this.challengeInfo(r.challenge_code, r.user_id) : null,
+      audioLabel: p?.source_type === 'library' ? 'Deezer' : null,
     };
   }
 
@@ -425,6 +433,7 @@ export class Rounds {
       album: t.album,
       artworkUrl: t.artwork_url,
       externalUrl: t.external_url,
+        externalLabel: externalLabel(t.external_url),
       attemptsUsed: s.attempt,
       timeListenedMs: unlockedMs(s.attempt),
       pointsAwarded: s.points,
@@ -546,6 +555,7 @@ export class Rounds {
         artist: artistLine(t),
         artworkUrl: t.artwork_url,
         externalUrl: t.external_url,
+        externalLabel: externalLabel(t.external_url),
         status: (s.status === 'correct' ? 'correct' : 'missed') as 'correct' | 'missed',
         attemptsUsed: s.attempt,
         points: s.points,

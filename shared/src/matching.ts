@@ -184,7 +184,10 @@ export function titlesMatch(a: string, b: string): boolean {
   if (na === nb) return true;
   if (normalizeTitleLoose(a) === normalizeTitleLoose(b)) return true;
   // Tolerate punctuation/typo variants ("Livin' on a Prayer" / "Living on a Prayer")
-  // but never for very short titles where one letter changes the song.
+  // but never for very short titles where one letter changes the song, and never
+  // when the numbers differ ("Part 1" / "Part 2", "22" / "23").
+  const digits = (s: string) => (s.match(/\d+/g) ?? []).join(' ');
+  if (digits(na) !== digits(nb)) return false;
   return Math.min(na.length, nb.length) >= 6 && similarity(na, nb) >= TITLE_SIMILARITY_THRESHOLD;
 }
 

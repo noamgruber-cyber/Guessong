@@ -102,3 +102,18 @@ export const Refresh = (p: P) => (
     <path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" />
   </svg>
 );
+export const Heart = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M12 20s-7-4.35-7-10a4 4 0 0 1 7-2.65A4 4 0 0 1 19 10c0 5.65-7 10-7 10z" />
+  </svg>
+);
+export const Star = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M12 3.5l2.6 5.3 5.9.9-4.25 4.1 1 5.8L12 16.9l-5.25 2.7 1-5.8L3.5 9.7l5.9-.9z" />
+  </svg>
+);
+export const Trash = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" />
+  </svg>
+);

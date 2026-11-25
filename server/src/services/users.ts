@@ -135,7 +135,7 @@ export class Users {
   async spotifyAccessToken(userId: string): Promise<{ accessToken: string; expiresAt: number }> {
     const u = this.require(userId);
     if (!this.spotify || !u.spotify_refresh_token) {
-      throw new ApiError(401, 'spotify_not_connected', 'Connect your Spotify Premium account to play');
+      throw new ApiError(401, 'spotify_not_connected', 'Connect your Spotify account first');
     }
     const access = u.spotify_access_token ? this.cipher.decrypt(u.spotify_access_token) : null;
     if (access && (u.spotify_token_expires_at ?? 0) > now() + 90_000) {

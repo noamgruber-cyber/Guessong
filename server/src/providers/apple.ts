@@ -46,6 +46,8 @@ export class AppleProvider implements MusicProvider {
   readonly label = 'Apple Music';
   readonly playback = 'preview' as const;
   private limiter: RateLimiter;
+  /** After a 403/429 from Apple, interactive calls back off until this time. */
+  private blockedUntil = 0;
 
   constructor(
     searchPerMinute: number,
@@ -55,18 +57,26 @@ export class AppleProvider implements MusicProvider {
   }
 
   isThrottled(): boolean {
-    return this.limiter.waitMs() > 0;
+    return Date.now() < this.blockedUntil || this.limiter.waitMs() > 0;
   }
 
   private async call(path: string, params: Record<string, string>, opts: { wait: boolean }): Promise<ItunesResult[]> {
     if (opts.wait) await this.limiter.take();
-    else if (!this.limiter.tryTake()) throw new UpstreamThrottledError(this.limiter.waitMs());
+    else {
+      const blockedFor = this.blockedUntil - Date.now();
+      if (blockedFor > 0) throw new UpstreamThrottledError(blockedFor);
+      if (!this.limiter.tryTake()) throw new UpstreamThrottledError(this.limiter.waitMs());
+    }
 
     const url = `${BASE}${path}?${new URLSearchParams(params)}`;
     for (let attempt = 0; attempt < 3; attempt++) {
-      const res = await this.fetchImpl(url, { headers: { Accept: 'application/json' } });
+      const res = await this.fetchImpl(url, {
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(opts.wait ? 20_000 : 6_000),
+      });
       if (res.status === 403 || res.status === 429) {
-        if (!opts.wait) throw new UpstreamThrottledError(30_000);
+        this.blockedUntil = Date.now() + 60_000;
+        if (!opts.wait) throw new UpstreamThrottledError(60_000);
         await sleep(15_000 * (attempt + 1));
         continue;
       }

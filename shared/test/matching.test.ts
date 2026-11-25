@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { artistTokens, maskTitle, matchGuess, normalizeTitle, stripEditionTags } from '../src/matching';
+import { artistTokens, maskTitle, matchGuess, normalizeTitle, stripEditionTags, titlesMatch } from '../src/matching';
 
 const eileen = {
   id: 'target',
@@ -96,5 +96,12 @@ describe('maskTitle', () => {
 
   it('strips edition tags first', () => {
     expect(stripEditionTags('Bohemian Rhapsody - Remastered 2011')).toBe('Bohemian Rhapsody');
+  });
+
+  it('never treats titles with different numbers as the same song', () => {
+    expect(titlesMatch('Liked Song 7', 'Liked Song 3')).toBe(false);
+    expect(titlesMatch('Symphony No. 5', 'Symphony No. 9')).toBe(false);
+    expect(titlesMatch('22', '23')).toBe(false);
+    expect(titlesMatch("Livin' on a Prayer", 'Living on a Prayer')).toBe(true);
   });
 });

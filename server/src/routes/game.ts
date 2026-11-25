@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { HINT_ORDER, type HintType } from '@guessong/shared';
 import type { Ctx } from '../app';
 import { ApiError, LruCache, RateLimiter } from '../lib/util';
+import { isDeezerId } from '../providers/deezer';
 import { mockArtworkSvg, MockProvider, synthesizePreviewWav } from '../providers/mock';
 
 const params = z.object({ roundId: z.string(), songId: z.string() });
@@ -128,6 +129,21 @@ export function registerGameRoutes(api: FastifyInstance, ctx: Ctx) {
     const p = params.parse(req.params);
     const { track } = ctx.rounds.playableTrack(ctx.requireUser(req).id, p.roundId, p.songId);
     reply.header('Cache-Control', 'private, no-store');
+    if (isDeezerId(track.id)) {
+      // Deezer preview links are signed and expire: ask for a current one.
+      const url = ctx.providers.deezer ? await ctx.providers.deezer.previewUrl(track.id) : null;
+      if (!url) throw new ApiError(404, 'audio_unavailable', 'No preview for this song');
+      let upstream = await fetch(url);
+      if (upstream.status === 403 && ctx.providers.deezer) {
+        const fresh = await ctx.providers.deezer.getTrack(track.id, { fresh: true });
+        if (fresh?.previewUrl) upstream = await fetch(fresh.previewUrl);
+      }
+      if (!upstream.ok || !upstream.body) throw new ApiError(502, 'audio_unavailable', 'Preview could not be loaded');
+      reply.type(upstream.headers.get('content-type') ?? 'audio/mpeg');
+      const len = upstream.headers.get('content-length');
+      if (len) reply.header('Content-Length', len);
+      return reply.send(Readable.fromWeb(upstream.body as import('node:stream/web').ReadableStream));
+    }
     if (ctx.providers.music instanceof MockProvider) {
       let wav = wavCache.get(track.id);
       if (!wav) {
@@ -170,9 +186,12 @@ export function registerGameRoutes(api: FastifyInstance, ctx: Ctx) {
       if (limiters.size > 5000) limiters.delete(limiters.keys().next().value!);
     }
     if (!limiter.tryTake()) throw new ApiError(429, 'slow_down', 'Too many searches, slow down a little');
-    const storefront =
-      (q.playlistId ? ctx.catalog.getPlaylist(q.playlistId)?.storefront : undefined) ??
-      (ctx.config.provider === 'spotify' ? ctx.config.spotify.market : 'US');
+    const playlist = q.playlistId ? ctx.catalog.getPlaylist(q.playlistId) : undefined;
+    const storefront = playlist?.storefront ?? (ctx.config.provider === 'spotify' ? ctx.config.spotify.market : 'US');
+    // Library games are Deezer tracks, so their guesses come from Deezer's catalog.
+    if (playlist?.source_type === 'library' && ctx.providers.deezer) {
+      return ctx.search.search(q.q, storefront, ctx.providers.deezer);
+    }
     return ctx.search.search(q.q, storefront);
   });
 }

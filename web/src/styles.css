@@ -2039,3 +2039,194 @@ input {
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+/* ---- Spotify library games ------------------------------------------------ */
+
+.lib-row {
+  gap: 12px;
+}
+
+.lib-card {
+  flex: none;
+  width: 124px;
+  text-align: left;
+}
+
+.lib-card .art {
+  width: 124px;
+  height: 124px;
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+}
+
+.lib-card .title {
+  font-weight: 700;
+  font-size: 14px;
+  margin-top: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lib-card .sub {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 1px;
+}
+
+.lib-new .art {
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--border);
+  background: var(--bg);
+  box-shadow: none;
+  color: var(--green-strong);
+}
+
+.lib-new .art .icon {
+  width: 32px;
+  height: 32px;
+}
+
+.lib-title {
+  margin: 8px 44px 4px 0;
+  font-size: 21px;
+  font-weight: 800;
+}
+
+.lib-lead {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.lib-tiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.lib-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 14px;
+  border-radius: var(--radius);
+  background: var(--green-tint);
+  border: 1px solid var(--green-tint-2);
+  text-align: left;
+  min-height: 96px;
+}
+
+.lib-tile .icon {
+  width: 24px;
+  height: 24px;
+  color: var(--green-strong);
+  margin-bottom: 6px;
+}
+
+.lib-tile .t {
+  font-weight: 800;
+  font-size: 15px;
+}
+
+.lib-tile .s {
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.lib-genres {
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.lib-genres .count {
+  margin-left: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.lib-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.lib-go {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--green-strong);
+  padding: 6px 4px;
+}
+
+.list-item:disabled {
+  opacity: 0.55;
+}
+
+.lib-build {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 28px 4px 8px;
+}
+
+.lib-build h2 {
+  margin: 0 0 6px;
+  font-size: 21px;
+  font-weight: 800;
+}
+
+.lib-build .sub {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 15px;
+}
+
+.lib-build .progress {
+  margin-top: 22px;
+}
+
+.lib-error {
+  margin: 12px 0 18px;
+  color: var(--text-2);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.lib-remove {
+  display: block;
+  margin: 6px auto 0;
+  font-size: 14px;
+}
+
+.lib-connect-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.lib-connect-actions .link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  padding: 4px 8px;
+}
+
+.lib-connect-actions .link-btn .icon {
+  width: 14px;
+  height: 14px;
+}
+
+a.btn {
+  text-decoration: none;
+}

@@ -12,6 +12,7 @@ export function AccountSheet({ onClose, onImport }: { onClose: () => void; onImp
   const [name, setName] = useState(user?.displayName ?? '');
   const [devices, setDevices] = useState(false);
   const spotify = config?.provider === 'spotify';
+  const library = !!config?.spotifyLibrary;
 
   const save = async () => {
     try {
@@ -32,7 +33,7 @@ export function AccountSheet({ onClose, onImport }: { onClose: () => void; onImp
         <div>
           <div style={{ fontWeight: 800, fontSize: 20 }}>{user?.displayName}</div>
           <div style={{ color: 'var(--muted)', fontSize: 14 }}>
-            {spotify ? (user?.spotifyConnected ? 'Spotify connected' : 'Guest — Spotify not connected') : 'Guest player'}
+            {spotify || library ? (user?.spotifyConnected ? 'Spotify connected' : 'Guest — Spotify not connected') : 'Guest player'}
           </div>
         </div>
       </div>
@@ -87,6 +88,44 @@ export function AccountSheet({ onClose, onImport }: { onClose: () => void; onImp
         </>
       )}
 
+      {library && (
+        <>
+          <div className="label-sm">Spotify</div>
+          <div className="list">
+            {user?.spotifyConnected ? (
+              <>
+                <button className="list-item" onClick={onImport}>
+                  <div className="grow">
+                    <div className="t">New game from your Spotify</div>
+                    <div className="s">Playlists, liked songs, top songs, genres</div>
+                  </div>
+                </button>
+                <button
+                  className="list-item"
+                  onClick={async () => {
+                    const r = await api.disconnectSpotify();
+                    setUser(r.user);
+                    toast('Spotify disconnected');
+                  }}
+                >
+                  <div className="grow">
+                    <div className="t" style={{ color: 'var(--red-ink)' }}>Disconnect Spotify</div>
+                    <div className="s">Removes Guessong's access. Your games and scores stay.</div>
+                  </div>
+                </button>
+              </>
+            ) : (
+              <>
+                <a className="btn btn-primary btn-block" href={SPOTIFY_LOGIN_URL} style={{ marginTop: 10, textDecoration: 'none' }}>
+                  Connect Spotify
+                </a>
+                <p className="fine">Invite only: Spotify allows up to 5 accounts, added by the person who runs this Guessong.</p>
+              </>
+            )}
+          </div>
+        </>
+      )}
+
       <div className="label-sm">Session</div>
       <button
         className="btn btn-soft btn-block"
@@ -100,8 +139,9 @@ export function AccountSheet({ onClose, onImport }: { onClose: () => void; onImp
         Sign out
       </button>
       <p className="fine">
-        Music previews and metadata are provided by {providerLabel}. Guessong is an independent game and is not affiliated with or endorsed by{' '}
-        {providerLabel}.
+        Music previews and metadata are provided by {providerLabel}
+        {library ? '. Song lists in Spotify games come from your Spotify account, with previews by Deezer' : ''}. Guessong is an independent game
+        and is not affiliated with or endorsed by {library ? `${providerLabel}, Spotify or Deezer` : providerLabel}.
       </p>
     </Sheet>
   );

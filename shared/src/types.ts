@@ -15,6 +15,11 @@ export interface AppConfig {
   minPointsWithHints: number;
   songsPerRound: number;
   attempts: number;
+  /**
+   * Apple/mock mode with Spotify credentials configured: players on the app's
+   * Spotify allowlist can connect and build games from their own library.
+   */
+  spotifyLibrary: boolean;
 }
 
 export interface UserDTO {
@@ -55,7 +60,8 @@ export interface PlaylistCardDTO {
   songCount: number;
   playerCount: number;
   me: PersonalBestDTO | null;
-  source: 'seed' | 'import';
+  /** seed = curated, import = Spotify-mode import, library = built from a player's Spotify library. */
+  source: 'seed' | 'import' | 'library';
 }
 
 export interface RecentPlaylistDTO {
@@ -67,6 +73,8 @@ export interface PlaylistsResponse {
   languages: LanguageDTO[];
   playlists: PlaylistCardDTO[];
   recent: RecentPlaylistDTO[];
+  /** Games the current player built from their Spotify library (private to them). */
+  mine: PlaylistCardDTO[];
 }
 
 export interface LeaderboardEntryDTO {
@@ -138,6 +146,8 @@ export interface RevealDTO {
   artworkUrl: string | null;
   /** Link back to the track in the provider's app/store (attribution). */
   externalUrl: string | null;
+  /** Where externalUrl leads ("Spotify" for library games), or null for the main provider. */
+  externalLabel: string | null;
   attemptsUsed: number;
   timeListenedMs: number;
   pointsAwarded: number;
@@ -161,6 +171,8 @@ export interface RoundDTO {
   totalScore: number;
   status: 'active' | 'completed' | 'abandoned';
   challenge: ChallengeInfoDTO | null;
+  /** Who supplies this round's audio when it isn't the main provider ("Deezer" for library games). */
+  audioLabel: string | null;
 }
 
 export interface RoundStateResponse {
@@ -248,4 +260,50 @@ export interface SpotifyDeviceDTO {
 
 export interface ApiErrorBody {
   error: { code: string; message: string };
+}
+
+// ---- Spotify library games (Apple/mock mode) -----------------------------------
+
+export interface LibraryPlaylistDTO {
+  id: string;
+  name: string;
+  imageUrl: string | null;
+  trackCount: number | null;
+  /** Spotify only lets Development Mode apps read playlists you own or collaborate on. */
+  readable: boolean;
+}
+
+export interface LibraryGenreDTO {
+  key: string;
+  label: string;
+  count: number;
+}
+
+export interface LibraryOverviewDTO {
+  displayName: string;
+  likedCount: number | null;
+  playlists: LibraryPlaylistDTO[];
+  genres: LibraryGenreDTO[];
+  genresStatus: 'idle' | 'scanning' | 'ready' | 'error';
+  games: PlaylistCardDTO[];
+}
+
+export type LibrarySourceDTO =
+  | { kind: 'liked' }
+  | { kind: 'top' }
+  | { kind: 'genre'; key: string }
+  | { kind: 'playlist'; id: string };
+
+export interface LibraryJobDTO {
+  id: string;
+  /** The game's name, once the song list has been read. */
+  title: string | null;
+  status: 'running' | 'done' | 'error';
+  phase: 'reading' | 'matching' | 'saving';
+  /** Songs checked for a preview so far, out of `total`. */
+  done: number;
+  total: number;
+  matched: number;
+  playlistId: string | null;
+  error: { code: string; message: string } | null;
 }

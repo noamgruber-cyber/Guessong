@@ -16,6 +16,9 @@ import type {
   SpotifyDeviceDTO,
   SpotifyPlaylistOptionDTO,
   UserDTO,
+  LibraryJobDTO,
+  LibraryOverviewDTO,
+  LibrarySourceDTO,
 } from '@guessong/shared';
 
 export class ApiError extends Error {
@@ -105,6 +108,12 @@ export const api = {
   spotifyPlaylists: () => request<{ playlists: SpotifyPlaylistOptionDTO[] }>('GET', '/spotify/playlists'),
   importPlaylist: (spotifyPlaylistId: string, lang: string) =>
     request<{ playlist: PlaylistCardDTO }>('POST', '/playlists/import', { spotifyPlaylistId, lang }),
+
+  // Spotify-library games (Apple/mock mode)
+  library: () => request<LibraryOverviewDTO>('GET', '/library'),
+  createLibraryGame: (source: LibrarySourceDTO) => request<{ job: LibraryJobDTO }>('POST', '/library/games', source),
+  libraryJob: (jobId: string) => request<{ job: LibraryJobDTO }>('GET', `/library/jobs/${jobId}`),
+  removeLibraryGame: (playlistId: string) => request<{ ok: true }>('DELETE', `/library/games/${playlistId}`),
 };
 
 export const SPOTIFY_LOGIN_URL = '/api/v1/auth/spotify/login';

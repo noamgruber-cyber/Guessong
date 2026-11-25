@@ -24,6 +24,15 @@ export const SPOTIFY_SCOPES = [
   'playlist-read-collaborative',
 ];
 
+/** Apple/mock mode: read-only access to build games from the player's library. */
+export const SPOTIFY_LIBRARY_SCOPES = [
+  'user-read-private',
+  'playlist-read-private',
+  'playlist-read-collaborative',
+  'user-library-read',
+  'user-top-read',
+];
+
 const API = 'https://api.spotify.com/v1';
 const ACCOUNTS = 'https://accounts.spotify.com';
 
@@ -54,7 +63,7 @@ interface SpTrack {
   type?: string;
   is_local?: boolean;
   duration_ms: number;
-  artists: { name: string }[];
+  artists: { id?: string; name: string }[];
   album?: { name: string; images?: SpImage[] };
   external_ids?: { isrc?: string };
   external_urls?: { spotify?: string };
@@ -74,6 +83,17 @@ export interface SpotifyPlaylistSummary {
   ownerId: string;
   collaborative: boolean;
   trackCount: number | null;
+}
+
+/** A track from the player's library, with artist ids for genre grouping. */
+export interface LibraryTrack extends ProviderTrack {
+  artistIds: string[];
+}
+
+export interface SpotifyArtistInfo {
+  id: string;
+  name: string;
+  genres: string[];
 }
 
 export interface SpotifyDevice {
@@ -105,28 +125,42 @@ export function toSpotifyTrack(t: SpTrack): ProviderTrack | null {
   };
 }
 
+function toLibraryTrack(t: SpTrack): LibraryTrack | null {
+  const base = toSpotifyTrack(t);
+  if (!base) return null;
+  return { ...base, artistIds: t.artists.map((a) => a.id).filter((id): id is string => !!id) };
+}
+
 export class SpotifyApi {
   private appToken: { token: string; exp: number } | null = null;
   private throttledUntil = 0;
 
   constructor(
-    private cfg: { clientId: string; clientSecret: string; redirectUri: string },
+    private cfg: { clientId: string; clientSecret: string; redirectUri: string; apiBase?: string; accountsBase?: string },
     private fetchImpl: typeof fetch = fetch,
   ) {}
+
+  private get api() {
+    return this.cfg.apiBase ?? API;
+  }
+
+  private get accounts() {
+    return this.cfg.accountsBase ?? ACCOUNTS;
+  }
 
   isThrottled() {
     return Date.now() < this.throttledUntil;
   }
 
-  authorizeUrl(state: string): string {
+  authorizeUrl(state: string, scopes: string[] = SPOTIFY_SCOPES): string {
     const params = new URLSearchParams({
       response_type: 'code',
       client_id: this.cfg.clientId,
-      scope: SPOTIFY_SCOPES.join(' '),
+      scope: scopes.join(' '),
       redirect_uri: this.cfg.redirectUri,
       state,
     });
-    return `${ACCOUNTS}/authorize?${params}`;
+    return `${this.accounts}/authorize?${params}`;
   }
 
   private basicAuth() {
@@ -134,7 +168,7 @@ export class SpotifyApi {
   }
 
   private async tokenRequest(body: Record<string, string>): Promise<SpotifyTokenSet> {
-    const res = await this.fetchImpl(`${ACCOUNTS}/api/token`, {
+    const res = await this.fetchImpl(`${this.accounts}/api/token`, {
       method: 'POST',
       headers: { Authorization: this.basicAuth(), 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams(body),
@@ -180,7 +214,7 @@ export class SpotifyApi {
   ): Promise<T | null> {
     const q = new URLSearchParams();
     for (const [k, v] of Object.entries(opts.query ?? {})) if (v !== undefined) q.set(k, String(v));
-    const url = `${API}${path}${q.size ? `?${q}` : ''}`;
+    const url = `${this.api}${path}${q.size ? `?${q}` : ''}`;
     for (let attempt = 0; attempt < 4; attempt++) {
       const bearer = token === 'app' ? await this.getAppToken() : token;
       const res = await this.fetchImpl(url, {
@@ -309,6 +343,82 @@ export class SpotifyApi {
       if (!page?.next) break;
     }
     return out;
+  }
+
+  // ---- library (Apple/mock mode games) -------------------------------------------
+
+  /** Items of a playlist the user owns or collaborates on, with artist ids. */
+  async playlistLibraryTracks(token: string, id: string, max = 500): Promise<LibraryTrack[]> {
+    const out: LibraryTrack[] = [];
+    for (let offset = 0; offset < max; offset += 50) {
+      const page = await this.call<{ items?: { item?: SpTrack | null; track?: SpTrack | null }[]; next: string | null }>(
+        token,
+        'GET',
+        `/playlists/${encodeURIComponent(id)}/items`,
+        { query: { limit: 50, offset, market: 'from_token', additional_types: 'track' }, retry429: true },
+      );
+      for (const entry of page?.items ?? []) {
+        const t = entry.item ?? entry.track;
+        const mapped = t ? toLibraryTrack(t) : null;
+        if (mapped) out.push(mapped);
+      }
+      if (!page?.next) break;
+    }
+    return out;
+  }
+
+  async savedTracksTotal(token: string): Promise<number | null> {
+    const page = await this.call<{ total?: number }>(token, 'GET', '/me/tracks', { query: { limit: 1 }, retry429: true });
+    return page?.total ?? null;
+  }
+
+  /** Liked Songs, most recently liked first. */
+  async savedTracks(token: string, max = 500): Promise<LibraryTrack[]> {
+    const out: LibraryTrack[] = [];
+    for (let offset = 0; offset < max; offset += 50) {
+      const page = await this.call<{ items?: { item?: SpTrack | null; track?: SpTrack | null }[]; next: string | null }>(
+        token,
+        'GET',
+        '/me/tracks',
+        { query: { limit: 50, offset, market: 'from_token' }, retry429: true },
+      );
+      for (const entry of page?.items ?? []) {
+        const t = entry.item ?? entry.track;
+        const mapped = t ? toLibraryTrack(t) : null;
+        if (mapped) out.push(mapped);
+      }
+      if (!page?.next) break;
+    }
+    return out;
+  }
+
+  async topTracks(token: string, range: 'short_term' | 'medium_term' | 'long_term'): Promise<LibraryTrack[]> {
+    const page = await this.call<{ items?: SpTrack[] }>(token, 'GET', '/me/top/tracks', {
+      query: { limit: 50, time_range: range },
+      retry429: true,
+    });
+    return (page?.items ?? []).map(toLibraryTrack).filter((t): t is LibraryTrack => t !== null);
+  }
+
+  async topArtists(token: string, range: 'short_term' | 'medium_term' | 'long_term'): Promise<SpotifyArtistInfo[]> {
+    const page = await this.call<{ items?: { id: string; name: string; genres?: string[] }[] }>(token, 'GET', '/me/top/artists', {
+      query: { limit: 50, time_range: range },
+      retry429: true,
+    });
+    return (page?.items ?? []).map((a) => ({ id: a.id, name: a.name, genres: a.genres ?? [] }));
+  }
+
+  /** One artist (the batch endpoint is gone for Development Mode apps). */
+  async artist(token: string, id: string): Promise<SpotifyArtistInfo | null> {
+    try {
+      const a = await this.call<{ id: string; name: string; genres?: string[] }>(token, 'GET', `/artists/${encodeURIComponent(id)}`, {
+        retry429: true,
+      });
+      return a ? { id: a.id, name: a.name, genres: a.genres ?? [] } : null;
+    } catch (e) {
+      if (e instanceof SpotifyApiError && e.status === 404) return null;
+      throw e;
+    }
   }
 
   async devices(token: string): Promise<SpotifyDevice[]> {

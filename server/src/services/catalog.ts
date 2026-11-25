@@ -6,6 +6,8 @@ import type { MusicProvider, ProviderTrack, SeedTrack } from '../providers/types
 import { UpstreamThrottledError } from '../providers/types';
 import { mockTrackId } from '../providers/mock';
 import { parseStartAt, seedKey, type SeedPlaylist } from '../seeds';
+import type { CatalogIndex } from './catalogIndex';
+import { isDeezerId, type DeezerClient } from '../providers/deezer';
 
 export const MIN_PLAYLIST_TRACKS = SONGS_PER_ROUND + FALLBACK_SONGS;
 
@@ -32,7 +34,7 @@ export interface PlaylistRow {
   lang: string;
   storefront: string;
   artwork_url: string | null;
-  source_type: 'seed' | 'import';
+  source_type: 'seed' | 'import' | 'library';
   source_ref: string | null;
   owner_user_id: string | null;
   status: 'pending' | 'ready' | 'error';
@@ -59,7 +61,7 @@ export function defaultClipStartMs(durationMs: number | null): number {
   return Math.round(target / 500) * 500;
 }
 
-const NOISE_WORDS = /\b(live|karaoke|instrumental|remix|acoustic|cover|tribute|re-?recorded|sped up|slowed|8-bit|lullaby|made famous|in the style of|originally performed)\b/i;
+export const NOISE_WORDS = /\b(live|karaoke|instrumental|remix|acoustic|cover|tribute|re-?recorded|sped up|slowed|8-bit|lullaby|made famous|in the style of|originally performed)\b/i;
 
 export interface IngestReport {
   playlistId: string;
@@ -70,11 +72,23 @@ export interface IngestReport {
 }
 
 export class Catalog {
+  /** Set when Spotify-library games are enabled: resolves `dz:` track ids. */
+  deezer: DeezerClient | null = null;
+
   constructor(
     private db: Db,
     private provider: MusicProvider,
     private config: Config,
+    private index?: CatalogIndex,
   ) {}
+
+  /** Put every known main-catalog track into the autocomplete index. */
+  indexKnownTracks() {
+    if (!this.index) return;
+    for (const r of all<TrackRow>(this.db, 'SELECT * FROM tracks WHERE provider = ?', this.provider.id)) {
+      if (!r.id.startsWith('dz:')) this.index.addTrack(r.id, r.title, trackArtists(r));
+    }
+  }
 
   get providerId() {
     return this.provider.id;
@@ -92,7 +106,9 @@ export class Catalog {
          isrc = COALESCE(excluded.isrc, tracks.isrc),
          duration_ms = COALESCE(excluded.duration_ms, tracks.duration_ms),
          uri = COALESCE(excluded.uri, tracks.uri),
-         external_url = COALESCE(excluded.external_url, tracks.external_url),
+         -- Keep an existing link: library games point at Spotify, while search results
+         -- for the same Deezer track carry a Deezer link.
+         external_url = COALESCE(tracks.external_url, excluded.external_url),
          clip_start_ms = CASE WHEN ? THEN excluded.clip_start_ms ELSE tracks.clip_start_ms END,
          updated_at = excluded.updated_at`,
       this.provider.id,
@@ -110,6 +126,12 @@ export class Catalog {
       now(),
       clipStartMs !== undefined ? 1 : 0,
     );
+    if (this.index && !t.id.startsWith('dz:')) this.index.addTrack(t.id, t.title, t.artists);
+  }
+
+  /** Point a track's "Open in…" link somewhere specific (library games link to Spotify). */
+  setExternalUrl(id: string, url: string) {
+    run(this.db, 'UPDATE tracks SET external_url = ? WHERE provider = ? AND id = ?', url, this.provider.id, id);
   }
 
   getTrack(id: string): TrackRow | undefined {
@@ -120,6 +142,29 @@ export class Catalog {
   async ensureTrack(id: string, storefront: string): Promise<TrackRow | undefined> {
     const cached = this.getTrack(id);
     if (cached) return cached;
+    if (isDeezerId(id)) {
+      const d = this.deezer ? await this.deezer.getTrack(id) : null;
+      if (!d) return undefined;
+      this.upsertTrack(d);
+      return this.getTrack(id);
+    }
+    // Songs from the static autocomplete catalog validate without an API call.
+    const known = this.index?.get(id);
+    if (known) {
+      this.upsertTrack({
+        id,
+        title: known.title,
+        artists: [known.artist],
+        album: null,
+        artworkUrl: null,
+        previewUrl: null,
+        isrc: null,
+        durationMs: null,
+        uri: null,
+        externalUrl: null,
+      });
+      return this.getTrack(id);
+    }
     const t = await this.provider.getTrack(id, { storefront });
     if (!t) return undefined;
     this.upsertTrack(t);

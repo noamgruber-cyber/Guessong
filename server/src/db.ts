@@ -141,6 +141,13 @@ const MIGRATIONS: string[] = [
     created_at INTEGER NOT NULL
   );
   `,
+  /* 2: Spotify → Deezer preview matches (cached across players and imports) */ `
+  CREATE TABLE track_links (
+    spotify_id TEXT PRIMARY KEY,
+    deezer_id TEXT,                     -- NULL = no playable match found
+    matched_at INTEGER NOT NULL
+  );
+  `,
 ];
 
 export function openDb(path: string): Db {

@@ -39,7 +39,14 @@ export interface Config {
     market: string;
     /** Extra ms added to Connect-mode clips to make up for device start-up latency. */
     connectStartCompMs: number;
+    /** Testing only: point the client at a fake Spotify. */
+    apiBase?: string;
+    accountsBase?: string;
   };
+  /** Testing only: point the Deezer client at a fake API. */
+  deezerApiBase?: string;
+  /** Apple/mock mode + Spotify credentials: allowlisted players can build games from their library. */
+  spotifyLibrary: boolean;
 }
 
 function loadDotEnv() {
@@ -127,7 +134,11 @@ export function loadConfig(overrides: Partial<Config> = {}, env: NodeJS.ProcessE
       redirectUri: env.SPOTIFY_REDIRECT_URI ?? `${publicUrl}/api/v1/auth/spotify/callback`,
       market: env.SPOTIFY_MARKET ?? 'US',
       connectStartCompMs: int(env.SPOTIFY_CONNECT_COMP_MS, 0),
+      apiBase: env.SPOTIFY_API_BASE || undefined,
+      accountsBase: env.SPOTIFY_ACCOUNTS_BASE || undefined,
     },
+    deezerApiBase: env.DEEZER_API_BASE || undefined,
+    spotifyLibrary: provider !== 'spotify' && !!env.SPOTIFY_CLIENT_ID && !!env.SPOTIFY_CLIENT_SECRET,
     ...overrides,
   };
 

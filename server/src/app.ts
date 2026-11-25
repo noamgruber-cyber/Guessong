@@ -12,9 +12,12 @@ import { createProviders, type Providers } from './providers';
 import { SpotifyApiError } from './providers/spotify';
 import { registerAuthRoutes } from './routes/auth';
 import { registerGameRoutes } from './routes/game';
+import { registerLibraryRoutes } from './routes/library';
 import { registerSpotifyRoutes } from './routes/spotify';
 import type { SeedPlaylist } from './seeds';
 import { Catalog } from './services/catalog';
+import { CatalogIndex } from './services/catalogIndex';
+import { Library } from './services/library';
 import { Playlists } from './services/playlists';
 import { Rounds } from './services/rounds';
 import { SearchService } from './services/search';
@@ -32,6 +35,8 @@ export interface Ctx {
   playlists: Playlists;
   rounds: Rounds;
   search: SearchService;
+  /** Spotify-library games; null unless enabled (Apple/mock mode + Spotify credentials). */
+  library: Library | null;
   appConfig: AppConfig;
   /** Current user from the session cookie, or undefined. */
   currentUser(req: FastifyRequest): UserRow | undefined;
@@ -46,16 +51,25 @@ export interface BuildOptions {
   providers?: Providers;
   fetchImpl?: typeof fetch;
   logger?: boolean;
+  /** Autocomplete index; loaded from data/catalog by default. */
+  index?: CatalogIndex;
 }
 
 export async function buildApp(opts: BuildOptions): Promise<{ app: FastifyInstance; ctx: Ctx }> {
   const { config, db, seeds } = opts;
   const providers = opts.providers ?? createProviders(config, seeds, opts.fetchImpl);
   const users = new Users(db, config.sessionSecret, providers.spotify);
-  const catalog = new Catalog(db, providers.music, config);
+  const index = opts.index ?? CatalogIndex.load(config.dataDir, providers.music.id);
+  const catalog = new Catalog(db, providers.music, config, index);
+  catalog.deezer = providers.deezer;
+  catalog.indexKnownTracks();
   const playlists = new Playlists(db, catalog);
   const rounds = new Rounds(db, catalog, playlists, providers.music, config);
-  const search = new SearchService(providers.music, catalog);
+  const search = new SearchService(providers.music, catalog, index);
+  const library =
+    config.spotifyLibrary && providers.spotify && providers.deezer
+      ? new Library(db, users, providers.spotify, providers.deezer, catalog, playlists, config)
+      : null;
 
   const appConfig: AppConfig = {
     provider: config.provider,
@@ -67,6 +81,7 @@ export async function buildApp(opts: BuildOptions): Promise<{ app: FastifyInstan
     minPointsWithHints: config.scoring.minPointsWithHints,
     songsPerRound: SONGS_PER_ROUND,
     attempts: ATTEMPTS,
+    spotifyLibrary: !!library,
   };
 
   const app = Fastify({
@@ -75,6 +90,7 @@ export async function buildApp(opts: BuildOptions): Promise<{ app: FastifyInstan
     bodyLimit: 64 * 1024,
   });
   await app.register(cookie, { secret: config.sessionSecret });
+  search.onError = (e) => app.log.warn({ err: e }, 'live search failed, using the local catalog');
 
   const ctx: Ctx = {
     config,
@@ -86,6 +102,7 @@ export async function buildApp(opts: BuildOptions): Promise<{ app: FastifyInstan
     playlists,
     rounds,
     search,
+    library,
     appConfig,
     currentUser(req) {
       const raw = req.cookies[SESSION_COOKIE];
@@ -136,6 +153,7 @@ export async function buildApp(opts: BuildOptions): Promise<{ app: FastifyInstan
     registerAuthRoutes(api, ctx);
     registerGameRoutes(api, ctx);
     registerSpotifyRoutes(api, ctx);
+    registerLibraryRoutes(api, ctx);
   }, { prefix: '/api/v1' });
 
   // Built web client + SPA fallback (client-side routes like /play/:id, /c/:code).

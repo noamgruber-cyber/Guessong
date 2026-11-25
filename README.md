@@ -14,6 +14,8 @@ The game runs on a swappable music layer. Pick one per deployment with `MUSIC_PR
 | `spotify` | Full tracks through the player's **Spotify Premium** account | You + up to 4 people you allowlist | Private play with friends |
 | `mock` | Offline demo catalog with synthesized audio | Anyone | Development, tests, demos |
 
+Apple mode can also offer **Spotify games**. Add Spotify credentials, and you plus up to 4 friends can connect Spotify and play games built from your own playlists, Liked Songs, top songs and favorite genres. Everyone else keeps playing the curated playlists. See [Spotify games](#spotify-games-for-you-and-up-to-4-friends).
+
 ### ⚠️ Read before using Spotify mode
 
 Spotify mode works, but you should know what Spotify's rules say:
@@ -43,7 +45,39 @@ To try it offline, with no network access at all:
 MUSIC_PROVIDER=mock npm run dev
 ```
 
-## Spotify setup
+## Spotify games (for you and up to 4 friends)
+
+In Apple mode with `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` set, the home screen shows **Your Spotify games**. A player connects Spotify and picks what to play:
+
+- **Liked Songs** or **Your Top Songs** (short, medium and long term combined)
+- a **genre**, like "Your Mizrahi" or "Your Hip-Hop & Rap". Genres come from the Spotify genre tags of the artists you listen to, grouped into broad genres. A genre is offered once it has at least 16 of your songs.
+- one of **your playlists**
+
+How a game is built:
+
+- Spotify supplies the song list only. Each song is matched to a **Deezer 30-second preview**, by exact ISRC first, then by title and artist with covers and karaoke versions skipped.
+- Nobody needs Premium, and clips are timed precisely on every device, iPhone included.
+- A game keeps up to 150 songs. Songs without a preview are skipped, and a game needs at least 13.
+- Matching runs in the background with a progress bar, usually 10–30 seconds. Matches are cached, so later games are faster.
+- Guess suggestions in these rounds come from Deezer's whole catalog, and the result card links back to the song on Spotify.
+- Games are **private**: only the person who built one sees it on their home screen. Each game has its own leaderboard, and a challenge link lets anyone play it.
+
+Spotify's limits:
+
+- **5 users.** Spotify's Development Mode allows the app owner plus at most 4 more accounts, each added by hand. Wider access is only granted to companies.
+- **Only your own playlists.** Development Mode apps can read playlists the user owns or collaborates on, not ones they only follow. Those show up greyed out with an explanation. To play one, copy its songs into a playlist of your own.
+- **Policy.** The same caveat as Spotify mode applies (see above): Spotify's policy prohibits games, so keep this private.
+
+Setup:
+
+1. Create an app at the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) and select **Web API**.
+2. Add the redirect URI, which must match exactly:
+   - on Render: `https://YOUR-APP.onrender.com/api/v1/auth/spotify/callback`
+   - locally: `http://127.0.0.1:5173/api/v1/auth/spotify/callback`
+3. Under **User Management**, add the name and Spotify email of each friend (max 5 including you). Anyone not on the list sees "This Spotify account isn't on Guessong's invite list yet."
+4. Set `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET`. On Render that's the service's **Environment** tab, then **Save, rebuild and deploy**. Locally it's `.env`. Leave `MUSIC_PROVIDER` as `apple`.
+
+## Spotify mode setup
 
 1. Create an app at the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) and select **Web API** and **Web Playback SDK**.
 2. Add the redirect URIs, which must match exactly. Spotify rejects `localhost`, so use `127.0.0.1`:
@@ -94,10 +128,17 @@ Spotify has no "preview hook", so a clip starts about 30% into the full track, w
 
 All of these are configurable with `HINT_PENALTIES`, `SONG_HINT_UNLOCK_ATTEMPT` and `MIN_POINTS_WITH_HINTS`.
 
+**Guess search.** Suggestions come from the provider's *whole* catalog, never just the playlist, so they don't give the answer away.
+
+- Live results from the iTunes Search API come first.
+- That API allows only about 20 calls a minute per server. So the server also ships a local catalog of about 21,000 songs in `server/data/catalog/`: up to 50 songs by every artist in the curated playlists and in Apple's current top-100 chart, for each storefront.
+- When Apple is rate-limiting, or returns only a few results, suggestions come from that catalog, ranked by text match and popularity. Being in the playlist plays no part in the ranking.
+- Rebuild the catalog after changing the playlists with `npm run build-catalog`. It takes about 10 minutes, because it paces itself to Apple's limit.
+
 **Answer matching.** Guesses come from autocomplete over the provider's *whole* catalog, not just the playlist. The server looks up the guessed track itself; it never trusts titles sent by the client. A guess is correct on an id or ISRC match, or when the canonical title and the artist both match:
 
 - edition tags like *(Single Edit)*, *- 2011 Remaster* and *feat. X* are stripped
-- accents and punctuation are ignored, and small typos are tolerated in longer titles
+- accents and punctuation are ignored, and small typos are tolerated in longer titles, but numbers must match ("Part 1" is not "Part 2")
 - the artists must share at least one credited artist
 
 For example, with *Come On Eileen (Single Edit)* by *Dexys Midnight Runners & Kevin Rowland* as the answer:
@@ -111,10 +152,11 @@ For example, with *Come On Eileen (Single Edit)* by *Dexys Midnight Runners & Ke
 ```
 shared/   game rules, scoring, timeline math, answer matching, API types (used by both sides)
 server/   Fastify + node:sqlite
-  src/providers/   apple.ts · spotify.ts · mock.ts behind one MusicProvider interface
-  src/services/    catalog (ingestion, track cache) · rounds · playlists/leaderboards · search · users
-  src/routes/      auth · game · spotify
-  data/            playlists.json (curated seeds) · pins/apple.json (resolved ids)
+  src/providers/   apple.ts · spotify.ts · mock.ts behind one MusicProvider interface · deezer.ts (previews for Spotify games)
+  src/services/    catalog (ingestion, track cache) · catalogIndex (local autocomplete) · rounds · playlists/leaderboards
+                   search · library (Spotify games) · users
+  src/routes/      auth · game · spotify · library
+  data/            playlists.json (curated seeds) · pins/apple.json (resolved ids) · catalog/ (autocomplete catalog)
 web/      React + Vite
   src/audio/       PreviewEngine (Web Audio) · SpotifySdkEngine · SpotifyConnectEngine
   src/game/        machine.ts (round state machine) · useGame.ts (API + audio orchestration)
@@ -145,6 +187,7 @@ web/      React + Vite
 | `POST /rounds/:id/challenge`, `POST /playlists/:id/challenge`, `GET /challenges/:code` | Challenges |
 | `GET /search?q=&playlistId=` | Autocomplete. Cached; falls back to known tracks when rate-limited |
 | `GET /spotify/token\|devices\|playlists`, `POST /rounds/:id/songs/:songId/spotify/load\|play`, `POST /spotify/pause`, `POST /playlists/import` | Spotify mode |
+| `GET /library`, `POST /library/games {kind: liked\|top\|genre\|playlist}`, `GET /library/jobs/:id`, `DELETE /library/games/:playlistId` | Spotify games (Apple mode) |
 
 ## Curating playlists
 
@@ -185,8 +228,8 @@ Add a disk mounted at `/data` on a paid plan to keep them.
 ## Testing
 
 ```bash
-npm test                          # 59 unit + API tests: rules, matching, full rounds, Spotify flow (simulated API)
-npm run build && npm run test:e2e # plays a full round in Chromium and checks clip timing via Web Audio
+npm test                          # 74 unit + API tests: rules, matching, search, full rounds, Spotify mode and Spotify games (simulated APIs)
+npm run build && npm run test:e2e # in Chromium: a full round with clip-timing checks, then a Spotify game against a fake Spotify + Deezer
 ```
 
 The e2e test needs Playwright with Chromium installed (`npx playwright install chromium`). Screenshots go to `e2e-screenshots/`.

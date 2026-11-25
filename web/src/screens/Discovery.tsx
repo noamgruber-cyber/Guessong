@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { formatDuration, type PlaylistCardDTO, type PlaylistsResponse, type PlaylistSummaryResponse } from '@guessong/shared';
 import { api, ApiError, SPOTIFY_LOGIN_URL } from '../api';
 import { primeAudio } from '../audio';
+import { LibrarySheet, SpotifyGames } from '../components/library';
 import { AccountSheet, ImportSheet } from '../components/sheets';
 import { Diamond, Note, PlayIcon, PlusIcon, PodiumIcon, ShareIcon } from '../components/Icons';
 import { Artwork, Avatar, RankBadge, ScorePill, Sheet, Spinner } from '../components/ui';
@@ -19,6 +20,8 @@ export function Discovery() {
   const [open, setOpen] = useState<PlaylistCardDTO | null>(null);
   const [account, setAccount] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [openWhenLoaded, setOpenWhenLoaded] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -45,6 +48,7 @@ export function Discovery() {
     const q = new URLSearchParams(window.location.search);
     if (q.get('spotify') === 'connected') {
       toast('Spotify connected', 'success');
+      if (config?.spotifyLibrary && !storageGet('guessong.pendingChallenge')) setLibraryOpen(true);
       const pending = storageGet('guessong.pendingChallenge');
       if (pending) {
         storageSet('guessong.pendingChallenge', null);
@@ -53,9 +57,28 @@ export function Discovery() {
       }
     }
     const err = q.get('spotify_error');
-    if (err) toast(err === 'access_denied' ? 'Spotify sign-in was cancelled' : `Spotify sign-in failed (${err})`, 'error');
+    if (err) {
+      toast(
+        err === 'access_denied'
+          ? 'Spotify sign-in was cancelled'
+          : err === 'not_allowlisted'
+            ? "This Spotify account isn't on Guessong's invite list yet. Ask the person who runs it to add you."
+            : `Spotify sign-in failed (${err})`,
+        'error',
+      );
+    }
     if (q.size) window.history.replaceState(null, '', window.location.pathname);
-  }, [navigate, toast]);
+  }, [navigate, toast, config?.spotifyLibrary]);
+
+  // Open a freshly built library game once the list includes it.
+  useEffect(() => {
+    if (!openWhenLoaded || !data) return;
+    const card = data.mine.find((p) => p.id === openWhenLoaded);
+    if (card) {
+      setOpen(card);
+      setOpenWhenLoaded(null);
+    }
+  }, [data, openWhenLoaded]);
 
   const languages = data?.languages ?? [];
   const activeLang = lang && languages.some((l) => l.code === lang) ? lang : (languages[0]?.code ?? '');
@@ -84,8 +107,12 @@ export function Discovery() {
         </div>
       )}
 
+      {config?.spotifyLibrary && user && (
+        <SpotifyGames games={data?.mine ?? []} onOpen={setOpen} onNew={() => setLibraryOpen(true)} />
+      )}
+
       {languages.length > 0 && (
-        <div className="chip-row" role="group" aria-label="Language" style={{ marginTop: spotifyNeeded ? 14 : 0 }}>
+        <div className="chip-row" role="group" aria-label="Language" style={{ marginTop: spotifyNeeded || config?.spotifyLibrary ? 14 : 0 }}>
           {languages.map((l) => (
             <button
               key={l.code}
@@ -196,8 +223,41 @@ export function Discovery() {
         )}
       </div>
 
-      {open && <PlaylistSheet playlist={open} onClose={() => setOpen(null)} />}
-      {account && <AccountSheet onClose={() => setAccount(false)} onImport={() => { setAccount(false); setImporting(true); }} />}
+      {open && (
+        <PlaylistSheet
+          playlist={open}
+          onClose={() => setOpen(null)}
+          onRemoved={() => {
+            setOpen(null);
+            void load();
+          }}
+        />
+      )}
+      {account && (
+        <AccountSheet
+          onClose={() => setAccount(false)}
+          onImport={() => {
+            setAccount(false);
+            if (config?.spotifyLibrary) setLibraryOpen(true);
+            else setImporting(true);
+          }}
+        />
+      )}
+      {libraryOpen && (
+        <LibrarySheet
+          onClose={() => {
+            setLibraryOpen(false);
+            void load();
+            // A build left running finishes in the background.
+            setTimeout(() => void load(), 20_000);
+          }}
+          onCreated={(playlistId) => {
+            setLibraryOpen(false);
+            setOpenWhenLoaded(playlistId);
+            void load();
+          }}
+        />
+      )}
       {importing && (
         <ImportSheet
           onClose={() => setImporting(false)}
@@ -211,7 +271,15 @@ export function Discovery() {
   );
 }
 
-export function PlaylistSheet({ playlist, onClose }: { playlist: PlaylistCardDTO; onClose: () => void }) {
+export function PlaylistSheet({
+  playlist,
+  onClose,
+  onRemoved,
+}: {
+  playlist: PlaylistCardDTO;
+  onClose: () => void;
+  onRemoved?: () => void;
+}) {
   const { config, user, ensureUser, toast, providerLabel } = useSession();
   const navigate = useNavigate();
   const [summary, setSummary] = useState<PlaylistSummaryResponse | null>(null);
@@ -268,7 +336,7 @@ export function PlaylistSheet({ playlist, onClose }: { playlist: PlaylistCardDTO
         <div style={{ minWidth: 0 }}>
           <h2>{p.title}</h2>
           <div className="attribution">
-            <Note /> {providerLabel}
+            <Note /> {playlist.source === 'library' ? 'From your Spotify · previews by Deezer' : providerLabel}
           </div>
           <div className="meta">
             {plural(p.songCount, 'song')} • {summary?.songsPerRound ?? 10} per round
@@ -320,6 +388,22 @@ export function PlaylistSheet({ playlist, onClose }: { playlist: PlaylistCardDTO
       <button className="btn btn-primary btn-block play-cta" onClick={play} disabled={starting}>
         {starting ? <Spinner /> : <PlayIcon />} {needsSpotifyConnect(config, user) ? 'Connect Spotify to play' : 'Play'}
       </button>
+      {playlist.source === 'library' && onRemoved && (
+        <button
+          className="link-btn lib-remove"
+          onClick={async () => {
+            try {
+              await api.removeLibraryGame(playlist.id);
+              toast(`${p.title} removed`);
+              onRemoved();
+            } catch (e) {
+              toast((e as Error).message, 'error');
+            }
+          }}
+        >
+          Remove this game
+        </button>
+      )}
     </Sheet>
   );
 }

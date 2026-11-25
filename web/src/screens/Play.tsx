@@ -155,7 +155,7 @@ function PlayRound({ roundId }: { roundId: string }) {
 
       <AttemptRows song={song} wrongCount={state.wrongCount} resolved={state.phase === 'result'} />
 
-      <Timeline attempt={song.attempt} playhead={playhead} providerLabel={providerLabel} />
+      <Timeline attempt={song.attempt} playhead={playhead} providerLabel={state.round.audioLabel ?? providerLabel} />
 
       <HintBar song={song} rules={rules} disabled={!interactive} onHint={game.hint} />
       <HintReveals song={song} />

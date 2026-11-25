@@ -207,7 +207,6 @@ export function GuessSearch({
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
-  const [partial, setPartial] = useState(false);
   const [maxHeight, setMaxHeight] = useState(320);
   const wrapRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -232,7 +231,6 @@ export function GuessSearch({
       try {
         const res = await api.search(q, playlistId, ctrl.signal);
         setResults(res.results);
-        setPartial(res.partial);
         setActive(0);
         setOpen(true);
       } catch (e) {
@@ -240,7 +238,7 @@ export function GuessSearch({
       } finally {
         if (!ctrl.signal.aborted) setLoading(false);
       }
-    }, 250);
+    }, 300);
     return () => {
       ctrl.abort();
       clearTimeout(t);
@@ -357,7 +355,6 @@ export function GuessSearch({
             </button>
           ))}
           {results.length === 0 && <div className="note">No songs found. Try the artist's name too.</div>}
-          {partial && <div className="note">Search is busy, showing songs we already know.</div>}
         </div>
       )}
     </div>
@@ -467,7 +464,7 @@ export function ResultModal({
           </div>
           {reveal.externalUrl && (
             <a className="open-link" href={reveal.externalUrl} target="_blank" rel="noreferrer">
-              <ExternalIcon /> Open in {providerLabel}
+              <ExternalIcon /> Open in {reveal.externalLabel ?? providerLabel}
             </a>
           )}
           <button ref={btnRef} className="btn btn-primary btn-block" onClick={onContinue}>
