@@ -84,7 +84,8 @@ export function loadConfig(overrides: Partial<Config> = {}, env: NodeJS.ProcessE
   if (env === process.env) loadDotEnv();
   const isProd = env.NODE_ENV === 'production';
   const port = int(env.PORT, 8787);
-  const publicUrl = (env.PUBLIC_URL ?? `http://127.0.0.1:${port}`).replace(/\/$/, '');
+  // RENDER_EXTERNAL_URL is set automatically on Render, so no PUBLIC_URL is needed there.
+  const publicUrl = (env.PUBLIC_URL ?? env.RENDER_EXTERNAL_URL ?? `http://127.0.0.1:${port}`).replace(/\/$/, '');
   const provider = (env.MUSIC_PROVIDER ?? 'apple') as ProviderId;
   if (!['apple', 'spotify', 'mock'].includes(provider)) {
     throw new Error(`MUSIC_PROVIDER must be apple, spotify or mock (got "${provider}")`);

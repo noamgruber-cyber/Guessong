@@ -168,6 +168,20 @@ NODE_ENV=production SESSION_SECRET=$(openssl rand -hex 32) PUBLIC_URL=https://yo
 - The server serves the built web app, and HTTPS is needed for Spotify mode and for sharing.
 - Back up the `.sqlite` file. It holds users, rounds and leaderboards.
 
+### Render (free, works from a phone)
+
+`render.yaml` describes the service, so there's nothing to configure:
+
+1. Sign in at [dashboard.render.com](https://dashboard.render.com) with GitHub.
+2. Choose **New → Blueprint**, give Render access to this repository, and pick the branch.
+3. Choose **Deploy Blueprint**. The first build takes about 5 minutes. The app is then at `https://guessong-….onrender.com`.
+
+The server reads its public address from `RENDER_EXTERNAL_URL`, and Render generates `SESSION_SECRET`. On the free plan:
+- the service sleeps after 15 idle minutes, so the next visit takes about a minute to wake it
+- there's no persistent disk, so leaderboards reset on every restart or redeploy
+
+Add a disk mounted at `/data` on a paid plan to keep them.
+
 ## Testing
 
 ```bash

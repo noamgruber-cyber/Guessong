@@ -1,0 +1,14 @@
+# One-click deploy on Render (https://render.com): New → Blueprint → pick this repo.
+# Runs the Dockerfile in Apple-preview mode on the free plan. The free plan has no
+# persistent disk, so leaderboards reset whenever the service restarts or redeploys.
+services:
+  - type: web
+    name: guessong
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: MUSIC_PROVIDER
+        value: apple
+      - key: SESSION_SECRET
+        generateValue: true
