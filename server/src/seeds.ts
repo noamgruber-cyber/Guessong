@@ -11,11 +11,17 @@ import type { SeedTrack } from './providers/types';
  * Development Mode apps can't read editorial or other users' playlists).
  */
 
+const noteSchema = z.string().min(1).max(120);
+
 const trackSchema = z.union([
+  // [title, artist] or [title, artist, note]
   z.tuple([z.string(), z.string()]),
+  z.tuple([z.string(), z.string(), noteSchema]),
   z.object({
     title: z.string(),
     artist: z.string(),
+    /** Fun fact shown with the answer, e.g. "🇸🇪 Sweden · Eurovision winner 1974". */
+    note: noteSchema.optional(),
     startAt: z.string().optional(),
     apple: z.union([z.string(), z.number()]).optional(),
     spotify: z.string().optional(),
@@ -26,7 +32,10 @@ const playlistSchema = z.object({
   id: z.string().regex(/^[a-z0-9-]+$/),
   title: z.string(),
   description: z.string().optional(),
+  /** A language code, or "multi" for a playlist that mixes languages. */
   lang: z.string(),
+  /** Themed shelf (see COLLECTIONS in shared/src/languages.ts). */
+  collection: z.string().regex(/^[a-z0-9-]+$/).optional(),
   storefront: z.string().length(2),
   tracks: z.array(trackSchema).min(1),
 });
@@ -38,6 +47,7 @@ export interface SeedPlaylist {
   title: string;
   description: string | null;
   lang: string;
+  collection: string | null;
   storefront: string;
   tracks: SeedTrack[];
 }
@@ -55,11 +65,12 @@ export function loadSeedPlaylists(dataDir: string): SeedPlaylist[] {
     title: p.title,
     description: p.description ?? null,
     lang: p.lang,
+    collection: p.collection ?? null,
     storefront: p.storefront.toUpperCase(),
     tracks: p.tracks.map((t) => {
       const seed: SeedTrack = Array.isArray(t)
-        ? { title: t[0], artist: t[1] }
-        : { title: t.title, artist: t.artist, startAt: t.startAt, apple: t.apple?.toString(), spotify: t.spotify };
+        ? { title: t[0], artist: t[1], ...(t[2] ? { note: t[2] } : {}) }
+        : { title: t.title, artist: t.artist, note: t.note, startAt: t.startAt, apple: t.apple?.toString(), spotify: t.spotify };
       const pinned = pins[p.id]?.[seedKey(seed)];
       if (!seed.apple && pinned) seed.apple = String(pinned);
       return seed;

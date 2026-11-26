@@ -34,6 +34,7 @@ const reveal: RevealDTO = {
   artworkUrl: null,
   externalUrl: null,
   externalLabel: null,
+  note: null,
   attemptsUsed: 1,
   timeListenedMs: 500,
   pointsAwarded: 100,

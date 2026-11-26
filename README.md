@@ -178,7 +178,7 @@ web/      React + Vite
 |---|---|
 | `GET /me`, `POST /auth/guest`, `PATCH /me`, `POST /auth/logout` | Session (anonymous guests) and display name |
 | `GET /auth/spotify/login`, `GET /auth/spotify/callback`, `POST /me/spotify/disconnect` | Spotify OAuth (Authorization Code flow; tokens encrypted at rest) |
-| `GET /playlists?lang=&filter=popular\|unplayed` | Discovery grid, language chips, recently played |
+| `GET /playlists?lang=&filter=popular\|unplayed` | Discovery grid, themed and language chips (`lang` takes either), recently played |
 | `GET /playlists/:id/summary`, `GET /playlists/:id/leaderboard?page=&limit=` | Pre-game sheet (top 3) and full leaderboard |
 | `POST /rounds {playlistId, challengeCode?}`, `GET /rounds/:id` | Start a round (10 songs + 3 fallbacks), or resume one |
 | `POST /rounds/:id/songs/:songId/start\|skip\|hint\|guess\|reveal\|replace` | Song actions |
@@ -191,7 +191,7 @@ web/      React + Vite
 
 ## Curating playlists
 
-Edit `server/data/playlists.json`. Each playlist is a list of `["Title", "Artist"]` seeds, with a language and a storefront. Then run:
+Edit `server/data/playlists.json`. Each playlist is a list of `["Title", "Artist"]` seeds, with a language and a storefront. A seed can carry a third item, a fun fact shown on the answer card (`["Waterloo", "ABBA", "🇸🇪 Sweden · Eurovision winner 1974"]`). It never appears before the song is resolved. Then run:
 
 ```bash
 npm run ingest -- --write-pins        # resolves new seeds and pins their ids (Apple)
@@ -199,6 +199,15 @@ npm run ingest -- --only 80s-hits --force
 ```
 
 Hebrew playlists: Israeli Hits, Mizrahi Hits, Israeli Classics, New Israeli Pop and Israeli Rock, 40 songs each except Israeli Hits (26). Their songs are each artist's most popular tracks on Apple's Israeli store, with ids pinned.
+
+**Themed shelves.** `"collection": "eurovision"` or `"themes"` puts a playlist on a themed chip, which Discovery shows before the language chips (`COLLECTIONS` in `shared/src/languages.ts`). A themed playlist still appears on its language's shelf. A playlist that mixes languages uses `"lang": "multi"` and appears only on its theme.
+
+| Shelf | Playlists |
+| --- | --- |
+| 🎤 Eurovision | Eurovision Winners (58), Eurovision Bangers (49, the famous ones that mostly didn't win), Israel at Eurovision (41, Hebrew shelf too). Every song's answer card shows the country, year and placing, checked against Wikipedia |
+| ✨ Themes | Movie Hits (42) and Disney Songs (42), whose answer cards name the film; One-Hit Wonders (43), Christmas Hits (42), Army Band Classics (45, Hebrew shelf too) |
+
+The international themed playlists use the UK store (`GB`), the best match for Eurovision's catalog.
 
 The command lists any seeds it couldn't match. Some originals aren't in a given storefront, and the matcher deliberately rejects covers and karaoke versions. Israeli-store titles are in Hebrew script, so write those seeds in Hebrew.
 

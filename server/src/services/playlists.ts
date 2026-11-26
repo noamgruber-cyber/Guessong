@@ -1,6 +1,9 @@
 import {
+  collectionInfo,
+  COLLECTIONS,
   LANGUAGES,
   languageInfo,
+  MULTILINGUAL,
   SONGS_PER_ROUND,
   type LanguageDTO,
   type LeaderboardEntryDTO,
@@ -87,6 +90,7 @@ export class Playlists {
       playerCount: this.playerCount(p.id),
       me: this.personalBest(p.id, userId),
       source: p.source_type,
+      collection: p.collection ?? null,
     };
   }
 
@@ -100,15 +104,29 @@ export class Playlists {
 
   list(userId: string | null, opts: { lang?: string; filter?: 'popular' | 'unplayed' }): PlaylistsResponse {
     const ready = this.readyPlaylists();
-    const counts = new Map<string, number>();
-    for (const p of ready) if (p.source_type !== 'library') counts.set(p.lang, (counts.get(p.lang) ?? 0) + 1);
-    const known = LANGUAGES.filter((l) => counts.has(l.code));
-    const extra = [...counts.keys()].filter((c) => !LANGUAGES.some((l) => l.code === c)).map(languageInfo);
-    const languages: LanguageDTO[] = [...known, ...extra].map((l) => ({ ...l, playlistCount: counts.get(l.code) ?? 0 }));
-
     // Library games are private: only their owner sees them, in `mine`.
     const shared = ready.filter((p) => p.source_type !== 'library');
-    let cards = shared.filter((p) => !opts.lang || p.lang === opts.lang).map((p) => this.card(p, userId));
+
+    const counts = new Map<string, number>();
+    const shelfCounts = new Map<string, number>();
+    for (const p of shared) {
+      if (p.lang !== MULTILINGUAL) counts.set(p.lang, (counts.get(p.lang) ?? 0) + 1);
+      if (p.collection) shelfCounts.set(p.collection, (shelfCounts.get(p.collection) ?? 0) + 1);
+    }
+    const ordered = <T extends { code: string }>(known: readonly T[], present: Map<string, number>, info: (c: string) => T) => [
+      ...known.filter((l) => present.has(l.code)),
+      ...[...present.keys()].filter((c) => !known.some((l) => l.code === c)).map(info),
+    ];
+    const languages: LanguageDTO[] = ordered(LANGUAGES, counts, languageInfo).map((l) => ({ ...l, playlistCount: counts.get(l.code) ?? 0 }));
+    const collections: LanguageDTO[] = ordered(COLLECTIONS, shelfCounts, collectionInfo).map((c) => ({
+      ...c,
+      playlistCount: shelfCounts.get(c.code) ?? 0,
+    }));
+
+    // `lang` filters by language or by collection code.
+    let cards = shared
+      .filter((p) => !opts.lang || p.lang === opts.lang || p.collection === opts.lang)
+      .map((p) => this.card(p, userId));
     if (opts.filter === 'unplayed') {
       cards = cards.filter((c) => !c.me);
     } else {
@@ -135,7 +153,7 @@ export class Playlists {
     const mine = userId
       ? ready.filter((p) => p.source_type === 'library' && p.owner_user_id === userId).map((p) => this.card(p, userId))
       : [];
-    return { languages, playlists: cards, recent, mine };
+    return { collections, languages, playlists: cards, recent, mine };
   }
 
   private entries(playlistId: string, userId: string | null, limit: number, offset: number): LeaderboardEntryDTO[] {

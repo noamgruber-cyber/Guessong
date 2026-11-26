@@ -305,3 +305,39 @@ describe('fallback tracks', () => {
     expect(res.guess).toMatchObject({ title: 'Hurt' });
   });
 });
+
+describe('themed shelves and fun facts', () => {
+  it('lists collections before languages and filters by them', async () => {
+    const c = new Client();
+    const res = await c.req('GET', '/api/v1/playlists');
+    expect(res.json.collections.map((x: any) => x.code)).toEqual(['eurovision', 'themes']);
+    expect(res.json.collections[0]).toMatchObject({ label: 'Eurovision', flag: '🎤' });
+    // Multilingual playlists get no language chip of their own.
+    expect(res.json.languages.map((l: any) => l.code)).not.toContain('multi');
+    const ev = await c.req('GET', '/api/v1/playlists?lang=eurovision');
+    expect(ev.json.playlists.map((p: any) => p.id).sort()).toEqual(['eurovision-bangers', 'eurovision-winners', 'israel-at-eurovision']);
+    expect(ev.json.playlists.every((p: any) => p.collection === 'eurovision')).toBe(true);
+    // A themed playlist in one language shows on that language's shelf too.
+    const he = await c.req('GET', '/api/v1/playlists?lang=he');
+    expect(he.json.playlists.map((p: any) => p.id)).toContain('israel-at-eurovision');
+    const en = await c.req('GET', '/api/v1/playlists?lang=en');
+    expect(en.json.playlists.map((p: any) => p.id)).not.toContain('eurovision-winners');
+  });
+
+  it('shows the curated fun fact with the answer, never before', async () => {
+    const c = new Client();
+    await c.req('POST', '/api/v1/auth/guest');
+    const r = await c.req<RoundStateResponse>('POST', '/api/v1/rounds', { playlistId: 'eurovision-winners' });
+    expect(r.status).toBe(200);
+    expect(JSON.stringify(r.json)).not.toMatch(/Eurovision winner/);
+    const base = `/api/v1/rounds/${r.json.round.id}/songs/${r.json.song!.roundSongId}`;
+    for (let i = 0; i < 5; i++) await c.req('POST', `${base}/skip`);
+    const reveal = await c.req('POST', `${base}/reveal`);
+    expect(reveal.json.reveal.note).toMatch(/· Eurovision winner (19|20)\d\d/);
+    // Playlists without notes reveal null.
+    const r2 = await c.req<RoundStateResponse>('POST', '/api/v1/rounds', { playlistId: '80s-hits' });
+    const base2 = `/api/v1/rounds/${r2.json.round.id}/songs/${r2.json.song!.roundSongId}`;
+    for (let i = 0; i < 5; i++) await c.req('POST', `${base2}/skip`);
+    expect((await c.req('POST', `${base2}/reveal`)).json.reveal.note).toBeNull();
+  });
+});

@@ -80,10 +80,16 @@ export function Discovery() {
     }
   }, [data, openWhenLoaded]);
 
-  const languages = data?.languages ?? [];
-  const activeLang = lang && languages.some((l) => l.code === lang) ? lang : (languages[0]?.code ?? '');
-  const visible = useMemo(() => (data?.playlists ?? []).filter((p) => !activeLang || p.lang === activeLang), [data, activeLang]);
-  const langLabel = languages.find((l) => l.code === activeLang)?.label ?? 'Playlists';
+  // Themed shelves (Eurovision, Themes…) come first, then languages.
+  const shelves = useMemo(() => [...(data?.collections ?? []), ...(data?.languages ?? [])], [data]);
+  // With no saved choice, open on the first language; the themed chips sit in front of it.
+  const activeLang = lang && shelves.some((l) => l.code === lang) ? lang : (data?.languages[0]?.code ?? shelves[0]?.code ?? '');
+  const visible = useMemo(
+    () => (data?.playlists ?? []).filter((p) => !activeLang || p.lang === activeLang || p.collection === activeLang),
+    [data, activeLang],
+  );
+  const langLabel = shelves.find((l) => l.code === activeLang)?.label ?? 'Playlists';
+  const isShelf = (code: string) => data?.collections.some((c) => c.code === code) ?? false;
   const spotifyNeeded = needsSpotifyConnect(config, user);
 
   return (
@@ -111,12 +117,12 @@ export function Discovery() {
         <SpotifyGames games={data?.mine ?? []} onOpen={setOpen} onNew={() => setLibraryOpen(true)} />
       )}
 
-      {languages.length > 0 && (
-        <div className="chip-row" role="group" aria-label="Language" style={{ marginTop: spotifyNeeded || config?.spotifyLibrary ? 14 : 0 }}>
-          {languages.map((l) => (
+      {shelves.length > 0 && (
+        <div className="chip-row" role="group" aria-label="Playlist shelves" style={{ marginTop: spotifyNeeded || config?.spotifyLibrary ? 14 : 0 }}>
+          {shelves.map((l) => (
             <button
               key={l.code}
-              className="chip"
+              className={`chip${isShelf(l.code) ? ' chip-shelf' : ''}`}
               aria-pressed={l.code === activeLang}
               onClick={() => {
                 setLang(l.code);
@@ -343,6 +349,7 @@ export function PlaylistSheet({
           </div>
         </div>
       </div>
+      {p.description && playlist.source === 'seed' && <p className="pl-desc">{p.description}</p>}
 
       <div className="status-card">
         {me ? (

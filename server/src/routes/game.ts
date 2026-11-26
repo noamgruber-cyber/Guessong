@@ -16,7 +16,7 @@ export function registerGameRoutes(api: FastifyInstance, ctx: Ctx) {
 
   api.get('/playlists', async (req) => {
     const q = z
-      .object({ lang: z.string().max(8).optional(), filter: z.enum(['popular', 'unplayed']).optional() })
+      .object({ lang: z.string().max(24).optional(), filter: z.enum(['popular', 'unplayed']).optional() })
       .parse(req.query);
     return ctx.playlists.list(userId(req), q);
   });

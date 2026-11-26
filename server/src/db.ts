@@ -148,6 +148,10 @@ const MIGRATIONS: string[] = [
     matched_at INTEGER NOT NULL
   );
   `,
+  /* 3: themed shelves and per-song fun facts */ `
+  ALTER TABLE playlists ADD COLUMN collection TEXT;
+  ALTER TABLE playlist_tracks ADD COLUMN note TEXT;
+  `,
 ];
 
 export function openDb(path: string): Db {

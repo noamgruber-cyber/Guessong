@@ -311,6 +311,17 @@ input {
   color: #fff;
 }
 
+/* Themed shelves (Eurovision, Themes) stand out from the language chips. */
+.chip-shelf {
+  background: linear-gradient(120deg, #f3e8ff, #ffe4f1);
+  color: #6b21a8;
+}
+
+.chip-shelf[aria-pressed='true'] {
+  background: linear-gradient(120deg, #7c3aed, #db2777);
+  color: #fff;
+}
+
 .segmented {
   display: inline-flex;
   padding: 3px;
@@ -651,6 +662,13 @@ input {
   font-size: 13px;
   color: var(--muted);
   margin-top: 2px;
+}
+
+.pl-desc {
+  margin: 12px 0 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text-2);
 }
 
 .status-card {
@@ -1608,6 +1626,19 @@ input {
   color: var(--muted);
   font-size: 16px;
   font-weight: 500;
+}
+
+.result-body .fun-fact {
+  display: inline-block;
+  max-width: 100%;
+  margin-top: 10px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: linear-gradient(120deg, #f3e8ff, #ffe4f1);
+  color: #6b21a8;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
 }
 
 .stats3 {

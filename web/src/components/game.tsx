@@ -443,6 +443,7 @@ export function ResultModal({
           <div className={`eyebrow ${ok ? 'ok' : 'miss'}`}>{ok ? 'YOU GOT IT' : 'CORRECT ANSWER'}</div>
           <h2>{reveal.title}</h2>
           <div className="artist">{reveal.artist}</div>
+          {reveal.note && <div className="fun-fact">{reveal.note}</div>}
           <div className="stats3">
             <div>
               <span className="k">Attempts used</span>

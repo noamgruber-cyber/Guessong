@@ -124,6 +124,7 @@ const seeds: SeedPlaylist[] = [
     title: 'Test Hits',
     description: null,
     lang: 'en',
+    collection: null,
     storefront: 'US',
     tracks: Array.from({ length: 14 }, (_, i) => ({ title: `Song ${i}`, artist: `Artist ${i}`, ...(i === 0 ? { startAt: '1:02' } : {}) })),
   },

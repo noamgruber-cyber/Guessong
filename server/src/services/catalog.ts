@@ -32,6 +32,7 @@ export interface PlaylistRow {
   title: string;
   description: string | null;
   lang: string;
+  collection: string | null;
   storefront: string;
   artwork_url: string | null;
   source_type: 'seed' | 'import' | 'library';
@@ -265,16 +266,23 @@ export class Catalog {
     opts: { force?: boolean; log?: (msg: string) => void } = {},
   ): Promise<IngestReport | null> {
     const log = opts.log ?? (() => {});
-    const sourceRef = sha1(JSON.stringify({ p: this.provider.id, t: seed.tracks.map((t) => [t.title, t.artist, t.startAt ?? '']) }));
+    // Notes join the hash only when present, so playlists without them keep their old ref.
+    const sourceRef = sha1(
+      JSON.stringify({
+        p: this.provider.id,
+        t: seed.tracks.map((t) => (t.note ? [t.title, t.artist, t.startAt ?? '', t.note] : [t.title, t.artist, t.startAt ?? ''])),
+      }),
+    );
     const existing = this.getPlaylist(seed.id);
     const t0 = now();
     if (existing && existing.source_ref === sourceRef && existing.status === 'ready' && !opts.force) {
       run(
         this.db,
-        'UPDATE playlists SET title = ?, description = ?, lang = ?, storefront = ?, sort_order = ? WHERE id = ?',
+        'UPDATE playlists SET title = ?, description = ?, lang = ?, collection = ?, storefront = ?, sort_order = ? WHERE id = ?',
         seed.title,
         seed.description,
         seed.lang,
+        seed.collection,
         seed.storefront,
         sortOrder,
         seed.id,
@@ -284,13 +292,14 @@ export class Catalog {
     if (!existing) {
       run(
         this.db,
-        `INSERT INTO playlists (id, provider, title, description, lang, storefront, source_type, source_ref, status, sort_order, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'seed', NULL, 'pending', ?, ?, ?)`,
+        `INSERT INTO playlists (id, provider, title, description, lang, collection, storefront, source_type, source_ref, status, sort_order, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'seed', NULL, 'pending', ?, ?, ?)`,
         seed.id,
         this.provider.id,
         seed.title,
         seed.description,
         seed.lang,
+        seed.collection,
         seed.storefront,
         sortOrder,
         t0,
@@ -351,16 +360,24 @@ export class Catalog {
         run(this.db, 'DELETE FROM playlist_tracks WHERE playlist_id = ?', seed.id);
         ordered.forEach(({ seed: s, t }, pos) => {
           this.upsertTrack(t, this.clipStartFor(s, t));
-          run(this.db, 'INSERT INTO playlist_tracks (playlist_id, track_id, position) VALUES (?, ?, ?)', seed.id, t.id, pos);
+          run(
+            this.db,
+            'INSERT INTO playlist_tracks (playlist_id, track_id, position, note) VALUES (?, ?, ?, ?)',
+            seed.id,
+            t.id,
+            pos,
+            s.note ?? null,
+          );
         });
       }
       run(
         this.db,
-        `UPDATE playlists SET title = ?, description = ?, lang = ?, storefront = ?, sort_order = ?, status = ?,
+        `UPDATE playlists SET title = ?, description = ?, lang = ?, collection = ?, storefront = ?, sort_order = ?, status = ?,
            status_detail = ?, source_ref = ?, updated_at = ? WHERE id = ?`,
         seed.title,
         seed.description,
         seed.lang,
+        seed.collection,
         seed.storefront,
         sortOrder,
         status,

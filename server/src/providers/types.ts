@@ -18,6 +18,8 @@ export interface ProviderTrack {
 export interface SeedTrack {
   title: string;
   artist: string;
+  /** Fun fact shown with the answer. */
+  note?: string;
   /** Spotify mode: where the clip starts in the full track, e.g. "1:02". */
   startAt?: string;
   /** Pinned provider ids, skip searching when present. */

@@ -62,6 +62,8 @@ export interface PlaylistCardDTO {
   me: PersonalBestDTO | null;
   /** seed = curated, import = Spotify-mode import, library = built from a player's Spotify library. */
   source: 'seed' | 'import' | 'library';
+  /** Themed shelf (COLLECTIONS code) the playlist belongs to, if any. */
+  collection: string | null;
 }
 
 export interface RecentPlaylistDTO {
@@ -70,6 +72,8 @@ export interface RecentPlaylistDTO {
 }
 
 export interface PlaylistsResponse {
+  /** Themed shelves (Eurovision, Themes…), shown before the languages. */
+  collections: LanguageDTO[];
   languages: LanguageDTO[];
   playlists: PlaylistCardDTO[];
   recent: RecentPlaylistDTO[];
@@ -148,6 +152,8 @@ export interface RevealDTO {
   externalUrl: string | null;
   /** Where externalUrl leads ("Spotify" for library games), or null for the main provider. */
   externalLabel: string | null;
+  /** Curated fun fact shown with the answer, e.g. "🇸🇪 Sweden · Eurovision winner 1974". */
+  note: string | null;
   attemptsUsed: number;
   timeListenedMs: number;
   pointsAwarded: number;

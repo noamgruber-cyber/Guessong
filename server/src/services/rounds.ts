@@ -423,6 +423,13 @@ export class Rounds {
     );
   }
 
+  private note(playlistId: string, trackId: string): string | null {
+    return (
+      get<{ note: string | null }>(this.db, 'SELECT note FROM playlist_tracks WHERE playlist_id = ? AND track_id = ?', playlistId, trackId)
+        ?.note ?? null
+    );
+  }
+
   private revealDTO(round: RoundRow, s: SongRow, roundTotal: number): RevealDTO {
     const t = this.track(s.track_id);
     return {
@@ -433,7 +440,8 @@ export class Rounds {
       album: t.album,
       artworkUrl: t.artwork_url,
       externalUrl: t.external_url,
-        externalLabel: externalLabel(t.external_url),
+      externalLabel: externalLabel(t.external_url),
+      note: this.note(round.playlist_id, s.track_id),
       attemptsUsed: s.attempt,
       timeListenedMs: unlockedMs(s.attempt),
       pointsAwarded: s.points,
