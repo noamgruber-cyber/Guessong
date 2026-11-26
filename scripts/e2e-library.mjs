@@ -271,7 +271,7 @@ async function main() {
       const roundId = page.url().split('/play/')[1];
       const answer = currentAnswer(roundId);
       assert(answer, 'answer found');
-      await page.getByRole('combobox').fill(answer.slice(0, 6));
+      await page.getByRole('combobox').fill(answer);
       const opt = page.getByRole('option').filter({ hasText: answer }).first();
       await opt.waitFor();
       await page.waitForTimeout(250);

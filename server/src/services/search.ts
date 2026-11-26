@@ -66,7 +66,15 @@ export class SearchService {
       seen.add(k);
       results.push(r);
     };
-    for (const t of tracks ?? []) push({ id: t.id, title: t.title, artist: t.artists.join(', ') });
+    const live_ = (tracks ?? []).map((t) => ({ id: t.id, title: t.title, artist: t.artists.join(', ') }));
+    // A song whose title is exactly what was typed (optionally followed by the artist)
+    // goes first: the live API sometimes buries short or unusual titles ("I.M").
+    const exact = (r: SearchResultDTO) => {
+      const t = normalizeTitle(r.title);
+      return t === norm || (t.length >= 2 && norm.startsWith(`${t} `) && normalizeTitle(`${r.title} ${r.artist}`).startsWith(norm));
+    };
+    for (const r of [...live_, ...local].filter(exact).slice(0, 3)) push(r);
+    for (const r of live_) push(r);
     for (const r of local) push(r);
     return { results, partial };
   }

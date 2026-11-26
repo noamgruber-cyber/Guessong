@@ -66,6 +66,15 @@ describe('CatalogIndex', () => {
     expect(index.search('come', 'gb', 10)).toHaveLength(0);
   });
 
+  it('finds an artist by either spelling of their name', () => {
+    const index = new CatalogIndex();
+    index.setAliases([['Noa Kirel', 'נועה קירל']]);
+    index.addFile({ version: 1, storefront: 'il', builtAt: '', tracks: [['n1', 'Unicorn', 'Noa Kirel', 1], ['n2', 'בריידזילה', 'נועה קירל', 2], ['x', 'Other', 'Someone', 1]] });
+    expect(index.search('נועה', 'il', 10).map((x) => x.id)).toEqual(['n1', 'n2']);
+    expect(index.search('noa kirel', 'il', 10).map((x) => x.id)).toEqual(['n1', 'n2']);
+    expect(index.search('unicorn נועה', 'il', 10).map((x) => x.id)).toEqual(['n1']);
+  });
+
   it('handles Hebrew titles', () => {
     const index = new CatalogIndex();
     index.addFile({ version: 1, storefront: 'il', builtAt: '', tracks: [['h1', 'תל אביב', 'עומר אדם', 1], ['h2', 'תפילה', 'Omer Adam', 2]] });
@@ -96,6 +105,17 @@ describe('SearchService', () => {
     expect(res.partial).toBe(true);
     expect(res.results.length).toBeGreaterThanOrEqual(6);
     expect(res.results.map((r) => r.title)).toEqual(expect.arrayContaining(['Come Together', 'Come As You Are', 'Come On Over']));
+  });
+
+  it('puts an exact title match first even when the live API buries it', async () => {
+    const { search } = setup(
+      fakeProvider(async () => Array.from({ length: 12 }, (_, i) => track(`junk${i}`, `I'm Song ${i}`, `Someone ${i}`))),
+    );
+    // "Geno" exists only in the local catalog; live results are all unrelated.
+    const res = await search.search('geno', 'us');
+    expect(res.results[0].title).toBe('Geno');
+    const typed = await search.search('geno dexys', 'us');
+    expect(typed.results[0].title).toBe('Geno');
   });
 
   it('falls back to the local catalog when the live API errors', async () => {

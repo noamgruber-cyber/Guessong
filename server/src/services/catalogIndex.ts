@@ -20,21 +20,40 @@ interface Entry {
   normTitle: string;
   key: string;
   rank: number;
+  side: boolean;
 }
 
 const NEUTRAL_RANK = 25;
+/** Live takes, medleys and remixes stay findable but rank below the studio song. */
+const SIDE_VERSION = /\b(live|unplugged|medley|remix|karaoke|instrumental|acoustic)\b|מחרוזת|בהופעה|לייב|רמיקס/i;
 
-function makeEntry(id: string, title: string, artist: string, rank: number): Entry {
+/** Groups of spellings for the same artist (data/catalog/aliases.json). */
+type AliasGroups = string[][];
+
+function aliasWords(artist: string, groups: AliasGroups): string[] {
+  if (!groups.length) return [];
+  const hay = ` ${normalizeTitle(artist)} `;
+  const extra: string[] = [];
+  for (const g of groups) {
+    if (g.some((name) => hay.includes(` ${name} `))) extra.push(...g.flatMap((name) => name.split(' ')));
+  }
+  return extra;
+}
+
+function makeEntry(id: string, title: string, artist: string, rank: number, aliases: AliasGroups = []): Entry {
   const normTitle = normalizeTitle(title);
+  const artistWords = normalizeTitle(artist).split(' ').filter(Boolean);
   return {
     id,
     title,
     artist,
     titleWords: normTitle.split(' ').filter(Boolean),
-    artistWords: normalizeTitle(artist).split(' ').filter(Boolean),
+    // Other spellings of the artist's name ("Noa Kirel" / "נועה קירל") match too.
+    artistWords: [...new Set([...artistWords, ...aliasWords(artist, aliases)])],
     normTitle,
     key: `${normTitle}|${normalizeArtist(artist)}`,
     rank,
+    side: SIDE_VERSION.test(title),
   };
 }
 
@@ -61,11 +80,19 @@ export class CatalogIndex {
   private byStorefront = new Map<string, Entry[]>();
   private extra = new Map<string, Entry>();
   private byId = new Map<string, Entry>();
+  private aliases: AliasGroups = [];
+
+  /** Spellings that should find the same artist, e.g. [["Noa Kirel", "נועה קירל"]]. */
+  setAliases(groups: string[][]) {
+    this.aliases = groups.map((g) => g.map((name) => normalizeTitle(name)).filter(Boolean)).filter((g) => g.length > 1);
+  }
 
   static load(dataDir: string, provider: string): CatalogIndex {
     const index = new CatalogIndex();
     const dir = resolve(dataDir, 'catalog');
     if (!existsSync(dir)) return index;
+    const aliasFile = resolve(dir, 'aliases.json');
+    if (existsSync(aliasFile)) index.setAliases((JSON.parse(readFileSync(aliasFile, 'utf8')) as { artists: string[][] }).artists);
     for (const name of readdirSync(dir)) {
       if (!name.startsWith(`${provider}-`) || !name.endsWith('.json')) continue;
       const file = JSON.parse(readFileSync(resolve(dir, name), 'utf8')) as CatalogFile;
@@ -75,7 +102,7 @@ export class CatalogIndex {
   }
 
   addFile(file: CatalogFile) {
-    const entries = file.tracks.map(([id, title, artist, rank]) => makeEntry(id, title, artist, rank));
+    const entries = file.tracks.map(([id, title, artist, rank]) => makeEntry(id, title, artist, rank, this.aliases));
     this.byStorefront.set(file.storefront, [...(this.byStorefront.get(file.storefront) ?? []), ...entries]);
     for (const e of entries) if (!this.byId.has(e.id)) this.byId.set(e.id, e);
   }
@@ -83,7 +110,7 @@ export class CatalogIndex {
   /** Index a track the server knows about (any storefront). */
   addTrack(id: string, title: string, artists: string[]) {
     if (this.byId.has(id)) return;
-    const e = makeEntry(id, title, artists.join(', '), NEUTRAL_RANK);
+    const e = makeEntry(id, title, artists.join(', '), NEUTRAL_RANK, this.aliases);
     this.extra.set(id, e);
     this.byId.set(id, e);
   }
@@ -116,6 +143,7 @@ export class CatalogIndex {
       if (e.normTitle === normQuery) s += 3;
       else if (e.normTitle.startsWith(normQuery)) s += 2;
       s += ((50 - Math.min(e.rank, 50)) / 50) * 1.5;
+      if (e.side) s -= 2.5;
       scored.push({ e, s });
     };
     for (const e of this.byStorefront.get(storefront) ?? []) consider(e);

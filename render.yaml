@@ -1,6 +1,6 @@
 # One-click deploy on Render (https://render.com): New → Blueprint → pick this repo.
-# Runs the Dockerfile in Apple-preview mode on the free plan. The free plan has no
-# persistent disk, so leaderboards reset whenever the service restarts or redeploys.
+# Runs the Dockerfile in Apple-preview mode on the free plan. The free plan wipes the disk
+# whenever the service sleeps, restarts or redeploys; set BACKUP_DATABASE_URL to keep data.
 services:
   - type: web
     name: guessong
@@ -17,4 +17,7 @@ services:
       - key: SPOTIFY_CLIENT_ID
         sync: false
       - key: SPOTIFY_CLIENT_SECRET
+        sync: false
+      # Optional: keeps users, games and leaderboards across restarts (free Neon Postgres URL).
+      - key: BACKUP_DATABASE_URL
         sync: false

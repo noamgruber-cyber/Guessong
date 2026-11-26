@@ -131,7 +131,7 @@ All of these are configurable with `HINT_PENALTIES`, `SONG_HINT_UNLOCK_ATTEMPT` 
 **Guess search.** Suggestions come from the provider's *whole* catalog, never just the playlist, so they don't give the answer away.
 
 - Live results from the iTunes Search API come first.
-- That API allows only about 20 calls a minute per server. So the server also ships a local catalog of about 21,000 songs in `server/data/catalog/`: up to 50 songs by every artist in the curated playlists and in Apple's current top-100 chart, for each storefront.
+- That API allows only about 20 calls a minute per server. So the server also ships a local catalog of about 23,500 songs in `server/data/catalog/`: up to 50 songs by every artist in the curated playlists and in Apple's current top-100 chart, for each storefront. `aliases.json` there lists other spellings of artist names, so "נועה קירל" also finds songs Apple lists under "Noa Kirel". Live versions and medleys rank below the studio song.
 - When Apple is rate-limiting, or returns only a few results, suggestions come from that catalog, ranked by text match and popularity. Being in the playlist plays no part in the ranking.
 - Rebuild the catalog after changing the playlists with `npm run build-catalog`. It takes about 10 minutes, because it paces itself to Apple's limit.
 
@@ -198,6 +198,8 @@ npm run ingest -- --write-pins        # resolves new seeds and pins their ids (A
 npm run ingest -- --only 80s-hits --force
 ```
 
+Hebrew playlists: Israeli Hits, Mizrahi Hits, Israeli Classics, New Israeli Pop and Israeli Rock, 40 songs each except Israeli Hits (26). Their songs are each artist's most popular tracks on Apple's Israeli store, with ids pinned.
+
 The command lists any seeds it couldn't match. Some originals aren't in a given storefront, and the matcher deliberately rejects covers and karaoke versions. Israeli-store titles are in Hebrew script, so write those seeds in Hebrew.
 
 ## Deploying
@@ -219,11 +221,20 @@ NODE_ENV=production SESSION_SECRET=$(openssl rand -hex 32) PUBLIC_URL=https://yo
 2. Choose **New → Blueprint**, give Render access to this repository, and pick the branch.
 3. Choose **Deploy Blueprint**. The first build takes about 5 minutes. The app is then at `https://guessong-….onrender.com`.
 
-The server reads its public address from `RENDER_EXTERNAL_URL`, and Render generates `SESSION_SECRET`. On the free plan:
-- the service sleeps after 15 idle minutes, so the next visit takes about a minute to wake it
-- there's no persistent disk, so leaderboards reset on every restart or redeploy
+The server reads its public address from `RENDER_EXTERNAL_URL`, and Render generates `SESSION_SECRET`. On the free plan the service sleeps after 15 idle minutes, so the next visit takes about a minute to wake it.
 
-Add a disk mounted at `/data` on a paid plan to keep them.
+**Keeping data on the free plan.** Render's free plan wipes the disk every time the service sleeps, restarts or redeploys. Without a backup, players lose their sign-in, Spotify connection, Spotify games and leaderboards. A free Postgres database keeps a copy:
+
+1. Sign up at [neon.tech](https://neon.tech) (free, no card) and create a project in a region near your Render service.
+2. Copy the connection string: **Connect → Connection string**. It looks like `postgresql://…@ep-….neon.tech/neondb?sslmode=require`.
+3. In Render, under **Environment**, add `BACKUP_DATABASE_URL` with that value, then save and deploy.
+
+How the backup works:
+- On start the server restores the saved copy. The log says `✓ Database backup: restored the saved copy`, or `no saved copy yet` on the first run.
+- It saves a compressed copy whenever something changed, at most every 30 seconds, and once more on shutdown. The live database is still SQLite.
+- If the backup can't be read at start, backups stay off for that run, so an empty database never overwrites the saved copy.
+
+On a paid plan you can attach a disk at `/data` instead.
 
 ## Testing
 

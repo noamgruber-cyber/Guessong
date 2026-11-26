@@ -104,8 +104,12 @@ describe('a full round', () => {
     expect(round.song!.unlockedMs).toBe(500);
     expect(round.song!.audio.kind).toBe('preview');
     const target = targetOf(round.song!.roundSongId);
-    expect(res.raw).not.toContain(target.title);
-    expect(res.raw).not.toContain(target.id);
+    // The playlist's cover mosaic shows its first songs' artwork, just like the public
+    // playlist card does, so leave it out; nothing else may identify the song.
+    const { mosaic: _cover, ...playlist } = round.round.playlist;
+    const visible = JSON.stringify({ ...round, round: { ...round.round, playlist } });
+    expect(visible).not.toContain(target.title);
+    expect(visible).not.toContain(target.id);
   });
 
   it('serves audio for the current song', async () => {

@@ -45,6 +45,8 @@ export interface Config {
   };
   /** Testing only: point the Deezer client at a fake API. */
   deezerApiBase?: string;
+  /** Postgres URL that keeps a copy of the SQLite database (for hosts with a wiped disk). */
+  backupDatabaseUrl: string | null;
   /** Apple/mock mode + Spotify credentials: allowlisted players can build games from their library. */
   spotifyLibrary: boolean;
 }
@@ -138,6 +140,7 @@ export function loadConfig(overrides: Partial<Config> = {}, env: NodeJS.ProcessE
       accountsBase: env.SPOTIFY_ACCOUNTS_BASE || undefined,
     },
     deezerApiBase: env.DEEZER_API_BASE || undefined,
+    backupDatabaseUrl: env.BACKUP_DATABASE_URL?.trim() || null,
     spotifyLibrary: provider !== 'spotify' && !!env.SPOTIFY_CLIENT_ID && !!env.SPOTIFY_CLIENT_SECRET,
     ...overrides,
   };
